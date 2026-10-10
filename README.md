@@ -2,7 +2,7 @@
 
 **A mutation roguelike in your browser.** Raise one pet through three hostile biomes. Feed it, scar it, sever its enemies' limbs and watch it become something you did not plan. No build step, no dependencies: plain HTML, CSS and ES modules.
 
-> Play it live: see the link in the repository description / Render deployment.
+> **Play it live: https://feral-bloom.onrender.com**
 
 ## The pitch
 
