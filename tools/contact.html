@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Feral Bloom contact sheet (dev)</title>
+<link rel="stylesheet" href="../style.css">
+<style>html,body{height:auto!important;overflow:visible!important}body{background:#1b251e;color:#ddd;font:13px system-ui;margin:0;padding:6px;overflow:auto;height:auto}
+.row{display:grid;grid-template-columns:repeat(3,360px);gap:4px;margin-bottom:4px}.c{background:#26332b;border-radius:8px;padding:2px;text-align:center;position:relative}
+.c span{position:absolute;left:8px;top:4px;font-weight:700;color:#cfe}svg.creature{width:100%;height:auto;display:block}</style></head><body><div id="g"></div>
+<script type="module">
+import { PET_SPECIES } from '../js/data/species.js';
+import { ENEMIES, BOSSES } from '../js/data/enemies.js';
+import { makePet, makeEnemy, makeHeart } from '../js/creature.js';
+import { renderCreature } from '../js/svg.js';
+import { MUTATIONS } from '../js/data/mutations.js';
+const q = new URLSearchParams(location.search); const grp = +(q.get('g') || 0), per = +(q.get('n') || 4);
+const pet0 = makePet(PET_SPECIES.mossling);
+const list = [...Object.values(PET_SPECIES).map(s => ({ id: s.id, name: s.name, mk: () => makePet(s), side: 'p' })),
+  ...Object.values(ENEMIES).map(e => ({ id: e.id, name: e.name, mk: () => makeEnemy(e, { scale: 1 }), side: 'e' })),
+  ...Object.values(BOSSES).map(e => ({ id: e.id, name: e.name, mk: () => e.mirror ? makeHeart(e, makePet(PET_SPECIES[q.get('hs') || 'mossling']), 1) : makeEnemy(e, { scale: 1 }), side: 'e' }))];
+const only = q.get('only'); const sel = only ? list.filter(o => only.split(',').includes(o.id)) : list.slice(grp * per, grp * per + per);
+const bySlot = {}; for (const m of MUTATIONS) (bySlot[m.slot] ||= []).push(m.id);
+const mkSlot = (c, sl) => ({ slot: sl, label: sl, hp: 8, max: 8, arm: 0, b: { hp: 8, arm: 0 }, sev: false, muts: [], trait: null });
+let h = '';
+sel.forEach((o, idx) => {
+  const plain = o.mk();
+  const mut = o.mk(); let n = 0;
+  for (const sl of Object.keys(mut.parts)) { const pool = bySlot[sl] || []; if (!pool.length) continue; const cnt = 1; for (let j = 0; j < cnt; j++) mut.parts[sl].muts.push(pool[(idx * 5 + j * 7 + n++ * 3 + (+q.get('off') || 0)) % pool.length]); }
+  for (const sl of ['ext1', 'ext2']) { if (!mut.parts[sl]) mut.parts[sl] = mkSlot(mut, sl); const pool = bySlot.extra || []; mut.parts[sl].muts.push(pool[(idx * 3 + (sl === 'ext1' ? 0 : 4)) % pool.length]); }
+  const sev = o.mk(); let cnt = 0; for (const sl of ['tail', 'fore', 'hind', 'eyes', 'back', 'jaws']) if (sev.parts[sl] && cnt < 4) { sev.parts[sl].sev = true; cnt++; }
+  const tough = o.mk(); for (const p of Object.values(tough.parts)) p.hp = Math.ceil(p.max * 0.3);
+  const mode = q.get('mode') || 'all';
+  const cells = mode === 'all' ? [['plain', plain, {}], ['mutated', mut, {}], ['severed', sev, { sevNow: [] }]] : [['plain+bars', plain, { bars: 'all', targetable: true, hl: 'head', suggest: 'torso' }], ['mutated+hurt', mut, { bars: 'all' }], ['severed', sev, {}]];
+  h += `<div class="row">${cells.map(([l, c, op]) => `<div class="c"><span>${o.name} - ${l}</span>${renderCreature(c, { side: o.side, ...op })}</div>`).join('')}</div>`;
+});
+document.getElementById('g').innerHTML = h; window.__ready = true;
+</script></body></html>

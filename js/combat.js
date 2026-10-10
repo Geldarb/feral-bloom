@@ -499,19 +499,38 @@ export function severPreview(s, slot) {
   return out;
 }
 // Best part to hit with move `mv` (score = expected damage + value of severing/killing)
+function scoreTarget(s, mv, slot) {
+  const E = s.e, p = E.parts[slot];
+  const e = estimate(s, 'p', mv, slot);
+  let sc = (e.hit / 100) * e.dmg * e.hits;
+  if (e.kill) sc += 80 * (e.hit / 100);
+  if (e.sever) {
+    const srcN = E.moves.filter(m => m.src === slot).length;
+    sc += (e.hit / 100) * (5 + srcN * 5 + (slot === 'eyes' ? 7 : 0) + (slot === 'jaws' ? 2 : 0) + (p.trait ? 4 : 0) + (slot === 'hind' ? 4 : 0));
+  }
+  if (slot === 'torso' && !e.kill) sc *= 0.6;
+  return sc;
+}
 export function suggestTarget(s, mv) {
   const E = s.e; let best = null, bs = -1;
   for (const [slot, p] of Object.entries(E.parts)) {
     if (p.sev) continue;
-    const e = estimate(s, 'p', mv, slot);
-    let sc = (e.hit / 100) * e.dmg * e.hits;
-    if (e.kill) sc += 80 * (e.hit / 100);
-    if (e.sever) {
-      const srcN = E.moves.filter(m => m.src === slot).length;
-      sc += (e.hit / 100) * (5 + srcN * 5 + (slot === 'eyes' ? 7 : 0) + (slot === 'jaws' ? 2 : 0) + (p.trait ? 4 : 0) + (slot === 'hind' ? 4 : 0));
-    }
-    if (slot === 'torso' && !e.kill) sc *= 0.6;
+    const sc = scoreTarget(s, mv, slot);
     if (sc > bs) { bs = sc; best = slot; }
+  }
+  return best;
+}
+// Best offensive move (from `moves`) against one part, or against any part when slot is null.
+export function bestMove(s, moves, slot = null) {
+  let best = null;
+  for (const mv of moves) {
+    if (mv.cdLeft > 0 || mv.tgt === 'self' || mv.tgt === 'enemy') continue;
+    const slots = slot ? [slot] : Object.keys(s.e.parts).filter(sl => !s.e.parts[sl].sev);
+    for (const sl of slots) {
+      if (!s.e.parts[sl] || s.e.parts[sl].sev) continue;
+      const sc = mv.tgt === 'all' ? scoreTarget(s, mv, 'torso') * 1.1 : scoreTarget(s, mv, sl);
+      if (!best || sc > best.score) best = { mv, slot: mv.tgt === 'all' ? 'torso' : sl, score: sc };
+    }
   }
   return best;
 }

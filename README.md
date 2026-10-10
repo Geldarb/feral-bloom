@@ -37,19 +37,19 @@
 
 ## How to play
 
-1. Click **New run**, choose a pet, optionally a seed and a mutation seed, then **Begin**.
-2. On the map pick a connected node. Each biome ends with a boss; the Heart of the Bloom waits at the end.
-3. In a fight (2 taps per turn): tap a **move**, then tap the enemy's **body part** on the creature (or a part chip). The suggested best part is pre-selected, so you can just hit **Strike!**; turn on **Quick confirm** in settings to strike the moment you tap a part, and **Fast mode** to speed up animations. Also **Brace**, **Item**, and **Devour** a severed part.
-4. After a win: let your pet regrow, absorb traits from severed parts, claim rewards.
-5. Keep an eye on **bond** (pink bar). Rest, groom, and feed treats.
+1. **Play**, pick a pet card, **Start**. (A 3-step skippable tour appears on your first run.)
+2. On the map tap a glowing node. Each biome ends with a boss; the Heart of the Bloom waits at the end.
+3. In a fight, **one tap per turn**: the best body part is pre-selected, so just tap **Attack** (the game picks the best move for that part), or tap a body part on the enemy to strike it right away. **Hold** a part to aim at it without striking; the strip above the buttons shows hit %, damage and whether it cuts the part off. **Special** uses your best mutation move, **Brace** guards, **Items** lists items and severed parts you can devour. The small list button next to the preview pins a specific move.
+4. After a win there is a single **Continue**: switches decide which severed traits to absorb (and which reward to take).
+5. Keep an eye on **bond** (pink bar). Rest, groom, and feed treats. The gear menu holds Sound, Fast animations, "Tap a part to strike" (on by default), the combat log and Give up.
 
-Mobile: the UI is designed for phones in portrait (360-430px): bottom-anchored action bars, bottom-sheet modals, 44px+ touch targets, safe-area insets. It can be added to the home screen (PWA manifest + icons).
+Mobile: designed for phones in portrait (360-430px) and landscape (arena left, controls right): bottom-anchored action bar, bottom-sheet modals, 44px+ touch targets, safe-area insets. Add it to the home screen (PWA manifest + icons).
 
-Keyboard (desktop): every button shows its hotkey. Numbers pick moves/parts/options, `A` auto-targets the suggested part, `Enter` confirms, `Esc` goes back, `P` opens the pet sheet, `M` opens settings.
+Keyboard (desktop): `1`-`4` = Attack / Special / Brace / Items (also pick options on choice screens and travel on the map), `Enter` = primary button, `Esc` = back/close, `P` pet, `M` menu.
 
 ## Art
 
-All art is hand-authored SVG, generated in code (no image assets): `js/art/` holds a drawing kit (outlines, gradient shading, highlights), 8 body-plan archetypes (quadruped, lizard, serpent, winged, crab, spider, biped, blob), per-species palettes and decorations for the 5 pets, 15 enemies and 4 bosses, ~50 mutation overlays that visibly change the pet (wings, horns, fangs, plating, flames, extra eyes...), layered biome backgrounds and an icon set. Every targetable body part is its own clickable region; severed parts vanish into a bleeding stump.
+All art is hand-authored SVG, generated in code (no image assets): `js/art/` holds a drawing kit (outlines, gradient shading, highlights), 8 body-plan archetypes (quadruped, lizard, serpent, winged, crab, spider, biped, blob), per-species palettes and decorations for the 5 pets, 15 enemies and 4 bosses, ~50 mutation overlays that visibly change the pet (wings, horns, fangs, plating, flames, extra eyes...), layered biome backgrounds and an icon set. Every targetable body part is its own clickable region; severed parts vanish into a bleeding stump drawn at the part's socket. Mutation overlays mount to per-body-plan anchor points (`js/art/overlays.js`): roots tuck behind the body, decals are clipped to the torso silhouette, and horns/wings/spines grow out from behind the part that hosts them. The five pets have distinct silhouettes: Mossling (chunky bog-pup), Cinderpup (lean long-snouted fox), Gloomfin (long newt/axolotl), Shellback (low-slung dome-shelled tortoise) and Wispling (upright big-eared sprite).
 
 ## Run locally
 
@@ -88,11 +88,13 @@ tests/
 
 ```bash
 node tests/logic.mjs        # rule tests: severing, regrowth, bosses, feral/refusal, determinism, save/restore, events
+node tests/art.mjs          # renders every creature x every mutation x sever masks; checks for NaN/dangling refs/unbalanced SVG
 node tests/sim.mjs 300      # bot plays 300 full runs; fails on any crash
+# contact sheets of all creatures (plain / mutated / severed): open tools/contact.html?g=0..5 in a browser (or see tools/)
 # headless browser click-through (installs nothing in the repo):
 mkdir -p /tmp/pw && (cd /tmp/pw && npm i puppeteer-core) && PW_DIR=/tmp/pw node tests/browser.mjs [url] [screenshotDir]
-# mobile pass: title -> setup -> map -> pet sheet -> fights (2 taps/turn) -> post-fight; checks no horizontal overflow,
-# touch targets >= 44px, no console errors; screenshots go to /workspace/feral-bloom-shots by default
+# mobile pass: title -> setup -> tutorial -> map -> pet sheet -> fights (1 tap/turn) -> post-fight, plus hold-to-aim, tap-a-part strike,
+# small-phone and landscape combat; checks no horizontal overflow, touch targets >= 44px, no console errors; screenshots go to /workspace/feral-bloom-shots2
 ```
 
 ## Notes

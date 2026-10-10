@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../style.css"><style>body{background:#1b251e;margin:0;padding:4px;overflow:auto;height:auto}.g{display:grid;grid-template-columns:repeat(2,560px);gap:4px}.c{position:relative;background:#26332b}svg.creature{width:100%;display:block}span{position:absolute;left:6px;top:2px;color:#fff;font:700 13px system-ui}</style></head><body><div class="g" id="g"></div>
+<script type="module">
+import { PET_SPECIES } from '../js/data/species.js';
+import { ENEMIES } from '../js/data/enemies.js';
+import { makePet, makeEnemy } from '../js/creature.js';
+import { renderCreature } from '../js/svg.js';
+import { ARCH } from '../js/art/arch.js';
+const q = new URLSearchParams(location.search);
+const pick = (q.get('ids') || 'mossling,gloomfin,mire_eel,echo_bat,stone_crab,pale_crawler,reed_stalker,leech_swarm').split(',');
+let h = '';
+for (const id of pick) {
+  const c = PET_SPECIES[id] ? makePet(PET_SPECIES[id]) : makeEnemy(ENEMIES[id], { scale: 1 });
+  let svg = renderCreature(c, { side: 'p' });
+  let grid = ''; for (let x = 0; x <= 300; x += 20) grid += `<line x1="${x}" y1="-16" x2="${x}" y2="222" stroke="${x % 100 ? '#fff3' : '#ff03'}" stroke-width="${x%100?0.5:1}"/><text x="${x+1}" y="-6" font-size="7" fill="#ff8">${x}</text>`;
+  for (let y = 0; y <= 220; y += 20) grid += `<line x1="0" y1="${y}" x2="300" y2="${y}" stroke="${y % 100 ? '#fff3' : '#ff03'}" stroke-width="${y%100?0.5:1}"/><text x="1" y="${y-1}" font-size="7" fill="#ff8">${y}</text>`;
+  const A = (c.isPlayer ? PET_SPECIES[id] : ENEMIES[id]) && '';
+  svg = svg.replace('</svg>', grid + '</svg>');
+  h += `<div class="c"><span>${id}</span>${svg}</div>`;
+}
+document.getElementById('g').innerHTML = h; window.__ready = true;
+</script></body></html>

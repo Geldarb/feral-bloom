@@ -33,6 +33,10 @@ const L = {
   mute: '<path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor" fill-opacity=".25"/><path d="M17 9l5 6M22 9l-5 6"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.5" r="1" fill="currentColor"/>',
   chevron: '<path d="M6 9l6 6 6-6"/>',
+  play: '<path d="M8 5l12 7-12 7z" fill="currentColor"/>',
+  moves: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+  special: '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
   sword: '<path d="M5 19L18 6l1-3 3 1-3 1L6 18zM4 20l3-3M8 16l-3 3"/>',
   // tags
   venom: '<path d="M12 3C8 9 6 12 6 15a6 6 0 0012 0c0-3-2-6-6-12z" fill="currentColor" fill-opacity=".25"/><path d="M10 15a2 2 0 002 2"/>',

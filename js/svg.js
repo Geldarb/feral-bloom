@@ -37,13 +37,28 @@ function ctxFor(c) {
   return { k, a, arch };
 }
 
-function stump(x, y, slot, ichor, fresh) {
-  const big = slot === 'torso' ? 1.2 : 1;
-  return `<g class="stump ${fresh ? 'fresh' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${big})">
-<circle r="15" fill="${ichor}" opacity=".35" class="pulse"/>
-<ellipse rx="9" ry="7.5" fill="${ichor}" stroke="${LINE}" stroke-width="2.4"/><ellipse rx="4.6" ry="3.6" fill="#2a0508"/><path d="M-5 -2 l3 3 M3 -3 l-2 4" stroke="#fff" stroke-width="1" opacity=".5"/>
-<g class="drip"><path d="M-4 6 q-3 9 0 12 q3 -3 0 -12Z" fill="${ichor}"/></g><g class="drip d2"><path d="M4 5 q-3 7 0 10 q3 -3 0 -10Z" fill="${ichor}"/></g>
-<circle cx="-12" cy="8" r="2" fill="${ichor}"/><circle cx="13" cy="4" r="1.6" fill="${ichor}"/><circle cx="2" cy="-13" r="1.8" fill="${ichor}"/></g>`;
+// Socket (where the part attaches to the body) and direction the part pointed, per body plan: [x, y, angle in degrees].
+const SOCK = {
+  quad: { head: [214, 102, -15], fore: [196, 128, 90], hind: [100, 128, 90], tail: [92, 112, 195], back: [150, 74, -90], eyes: [250, 78], jaws: [270, 118] },
+  lizard: { head: [216, 112, -10], fore: [180, 152, 90], hind: [92, 150, 90], tail: [82, 134, 190], back: [140, 90, -90], eyes: [246, 86], jaws: [264, 142] },
+  serpent: { head: [228, 118, -40], tail: [92, 178, 185], back: [140, 146, -90], eyes: [256, 80], jaws: [266, 118] },
+  winged: { head: [200, 98, -15], hind: [140, 168, 90], tail: [112, 132, 195], back: [140, 80, -90], eyes: [230, 80], jaws: [240, 112] },
+  crab: { head: [212, 104, -10], fore: [236, 132, 0], hind: [120, 160, 100], back: [150, 136, -90], eyes: [214, 130, -80], jaws: [230, 130] },
+  spider: { head: [188, 112, 0], fore: [200, 140, 20], hind: [92, 150, 100], back: [122, 74, -90], eyes: [226, 106], jaws: [236, 128] },
+  biped: { head: [152, 58, -90], fore: [196, 94, 0], hind: [152, 172, 90], tail: [130, 160, 190], back: [124, 80, 200], eyes: [152, 34], jaws: [152, 56] },
+  blob: { back: [140, 92, -90], eyes: [214, 96], jaws: [222, 118] },
+};
+function stump(x, y, ang, ichor, fresh, k, slot) {
+  const drips = `<g class="drip"><path d="M-4 8 q-3 9 0 12 q3 -3 0 -12Z" fill="${ichor}"/></g><g class="drip d2"><path d="M5 7 q-3 7 0 10 q3 -3 0 -10Z" fill="${ichor}"/></g>`;
+  const splash = `<circle cx="-12" cy="9" r="2" fill="${ichor}"/><circle cx="13" cy="5" r="1.6" fill="${ichor}"/>`;
+  if (ang === undefined) {
+    // eye socket / torn jaw: a dark bleeding hollow right on the face
+    const big = slot === 'jaws' ? 1.5 : 1;
+    return `<g class="stump ${fresh ? 'fresh' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${big})"><circle r="14" fill="${ichor}" opacity=".3" class="pulse"/><ellipse rx="9" ry="8" fill="${ichor}" stroke="${LINE}" stroke-width="2.4"/><ellipse rx="5" ry="4.6" fill="#2a0508"/>${drips}${splash}</g>`;
+  }
+  const big = slot === 'back' ? 1.4 : 1;
+  const stub = `<g transform="rotate(${ang})"><path d="M-6 -12 C4 -11 10 -10 12 -8 Q15 0 12 8 C10 10 4 11 -6 12Z" fill="${k.f}" stroke="${LINE}" stroke-width="3" stroke-linejoin="round"/><ellipse cx="12" cy="0" rx="4" ry="8" fill="${ichor}" stroke="${LINE}" stroke-width="2.4"/><ellipse cx="12.4" cy="0" rx="1.8" ry="3.8" fill="#f4e6d0"/></g>`;
+  return `<g class="stump ${fresh ? 'fresh' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${big})"><circle r="16" fill="${ichor}" opacity=".28" class="pulse"/>${stub}${drips}${splash}</g>`;
 }
 
 const wound = (x, y, frac, ichor) => {
@@ -63,8 +78,7 @@ export function renderCreature(c, opts = {}) {
   const headGone = parts.head && parts.head.sev;
   const slotCls = (sl, p) => ['part', 'p-' + sl, opts.targetable && !p.sev ? 'tgt' : '', opts.hl === sl ? 'hl' : '', opts.suggest === sl ? 'sug' : '', opts.flash && opts.flash[sl] ? 'f-' + opts.flash[sl] : ''].join(' ');
   const attrs = (sl, p) => `data-slot="${sl}" ${opts.targetable && !p.sev ? `data-act="ctarget" data-slot-arg="${sl}"` : ''}`;
-  const OA = overlayAnchors(arch === 'lizard' ? 'lizard' : 'quad');
-  const behind = [], front = [], tops = [];
+    const behind = [], front = [], tops = [];
 
   const build = (sl, p) => {
     let art = AR.parts[sl] ? AR.parts[sl](k) : '';
@@ -77,7 +91,7 @@ export function renderCreature(c, opts = {}) {
     if (ek) f += extArt(ek, k, sl);
     // mutation overlays
     p.muts.forEach((m, i) => {
-      const ov = overlayFor(k, arch === 'lizard' ? 'lizard' : 'quad', sl, m, i, MUTS[m]);
+      const ov = overlayFor(k, arch, sl, m, i, MUTS[m]);
       if (ov && typeof ov === 'object') { b += ov.b || ''; f += ov.f || ''; } else f += ov || '';
     });
     f += wound(partCenter(c, sl).x, partCenter(c, sl).y, p.hp / p.max, ichor);
@@ -94,7 +108,7 @@ export function renderCreature(c, opts = {}) {
     const sx = cen.x + (tc[0] - cen.x) * pull, sy = cen.y + (tc[1] - cen.y) * pull;
     const hidden = headGone && (sl === 'eyes' || sl === 'jaws');
     if (p.sev) {
-      stumps.push(stump(sx, sy, sl, ichor, (opts.sevNow || []).includes(sl)));
+      const sk = (SOCK[arch] || SOCK.quad)[sl]; stumps.push(sk ? stump(sk[0], sk[1], sk[2], ichor, (opts.sevNow || []).includes(sl), k, sl) : stump(sx, sy, 0, ichor, (opts.sevNow || []).includes(sl), k, sl));
       if ((opts.sevNow || []).includes(sl)) { const { b, f } = build(sl, { ...p, muts: [] }); ghosts.push(`<g class="flyoff">${b}${f}</g>`); }
       continue;
     }

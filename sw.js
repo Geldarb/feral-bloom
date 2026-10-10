@@ -1,5 +1,5 @@
 // Network-first service worker: always fresh when online, playable offline after the first visit.
-const CACHE = 'feral-bloom-v2';
+const CACHE = 'feral-bloom-v3';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

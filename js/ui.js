@@ -8,7 +8,7 @@ import { ITEMS } from './data/items.js';
 import { EVENTS } from './events.js';
 import { ENDINGS } from './endings.js';
 import { derive, listMoves, activeSynergies, activePenalties, SLOT_ORDER, describeStatus, canPlace, makePet, makeEnemy, makeHeart } from './creature.js';
-import { estimate, torsoGuard, REFUSE_BOND, suggestTarget, severPreview, initiativeHint } from './combat.js';
+import { estimate, torsoGuard, REFUSE_BOND, suggestTarget, severPreview, bestMove } from './combat.js';
 import { NODE_INFO, BIOME_SPANS, FINAL_LAYER, nodeById } from './map.js';
 import { renderCreature } from './svg.js';
 import { biomeBg } from './art/backgrounds.js';
@@ -20,7 +20,7 @@ const app = document.getElementById('app');
 const modalEl = document.getElementById('modal');
 let meta = loadMeta();
 let run = null;
-const ui = { screen: 'title', cs: { step: 'action' }, events: [], setup: { species: 'mossling', name: '', seed: '', seedMut: '' }, modal: null, msg: '', hold: null, tab: 'muts', logOpen: false, mapFocus: null };
+const ui = { screen: 'title', cs: { step: 'action' }, events: [], setup: { species: 'mossling', name: '', seed: '', seedMut: '' }, modal: null, msg: '', hold: null, tut: null, post: null, holdFired: false, tab: 'muts', logOpen: false, mapFocus: null };
 G.bindMeta(meta);
 setSound(meta.sound !== false);
 
@@ -32,7 +32,7 @@ const tagChip = t => `<span class="chip" style="--c:${TAGS[t]?.color || '#999'}"
 const key = k => `<kbd>${k}</kbd>`;
 const KEYS = '123456789';
 const fast = () => meta.fast === true;
-const quick = () => meta.quick === true;
+const quick = () => meta.quick !== false;
 
 function moveSummary(mv) {
   const st = (mv.st || []).map(x => `${describeStatus(x.k)}${x.ch < 1 ? ' ' + Math.round(x.ch * 100) + '%' : ''}`).join(', ');
@@ -70,25 +70,24 @@ const petBtn = `<button class="icon ghost" data-act="sheet" data-key="p" aria-la
 
 // ---------------- menu screens ----------------
 function titleScreen() {
-  const saved = loadRun(); const st = meta.stats;
+  const saved = loadRun(); const cont = saved && !saved.over; const st = meta.stats;
   return `<div class="screen titlescr">${bg('title')}
   <div class="top" style="position:absolute;right:0;left:0;top:0;z-index:5"><span style="flex:1"></span>${gearBtn}</div>
-  <div class="hero"><h1>Feral Bloom</h1><div class="tag">Raise one pet. Feed it, scar it, let it mutate. Cut away what stands in its way.</div><div class="mascot" style="height:min(30vh,230px);aspect-ratio:300/238">${cr(mascot(), { side: 'p', bars: 'none' })}</div></div>
-  <div class="menu">${saved && !saved.over ? `<button class="primary" data-act="continue" data-key="c">${key('C')}${I('map', 22)}Continue run</button>` : ''}
-   <button class="${saved && !saved.over ? '' : 'primary'}" data-act="new" data-key="n">${key('N')}${I('paw', 22)}New run</button>
-   <div class="grid2"><button data-act="codex" data-key="x">${key('X')}${I('book', 20)}Codex <span class="mini">${meta.discovered.length}/${MUTATIONS.length}</span></button><button data-act="seedlab" data-key="s">${key('S')}${I('seed', 20)}Seed Lab</button></div>
-   <button class="ghost" data-act="howto" data-key="h">${key('H')}${I('info', 20)}How to play</button></div>
-  <div class="stats">Runs ${st.runs} \u00b7 Wins ${st.wins} \u00b7 Best depth ${st.bestDepth}/${FINAL_LAYER + 1} \u00b7 <span class="spore">${meta.spores} spores</span> \u00b7 Endings ${meta.endings.length}/8</div></div>`;
+  <div class="hero"><h1>Feral Bloom</h1><div class="tag">Raise a pet. Feed it. Let it mutate.</div><div class="mascot" style="height:min(32vh,240px);aspect-ratio:300/238">${cr(mascot(), { side: 'p', bars: 'none' })}</div></div>
+  <div class="menu"><button class="primary big" data-act="${cont ? 'continue' : 'new'}" data-key="Enter">${I('play', 26)}${cont ? 'Continue' : 'Play'}</button>
+   ${cont ? `<button class="ghost" data-act="new">${I('paw', 20)}New run</button>` : ''}
+   <div class="iconrow"><button data-act="codex" aria-label="Codex">${I('book', 26)}<small>Codex</small></button><button data-act="seedlab" aria-label="Seed Lab">${I('seed', 26)}<small>Seeds</small></button><button data-act="howto" aria-label="How to play">${I('info', 26)}<small>Help</small></button></div></div>
+  <div class="stats">Best ${st.bestDepth}/${FINAL_LAYER + 1} \u00b7 Wins ${st.wins} \u00b7 <span class="spore">${meta.spores} spores</span></div></div>`;
 }
 
 function howtoScreen() {
   const sec = (t, b, open) => `<details class="how card" ${open ? 'open' : ''}><summary>${t}</summary>${b}</details>`;
   return `<div class="screen">${top({ left: backBtn(), title: 'How to play' })}<div class="content stack">
-  ${sec('The goal', '<p>Guide one pet through the Drowned Bog, the Hollow Caves and the Ashlands to the Heart of the Bloom. Each run is a fresh pet and a new procedural map. If the pet dies, the run ends (permadeath). Spores earned unlock new species and starting mutation seeds.</p><p>On the map, tap a glowing node (or the buttons at the bottom) to travel. Fights, elites, feeding sites, rest, mutation shrines, mysteries and a boss at the end of each land.</p>', true)}
-  ${sec('Fighting by body part', `<ul class="clean"><li>Tap a <b>move</b>, then tap the <b>exact body part</b> on the enemy (or use the part chips). A suggested part is pre-selected: just press <b>Strike</b> for a 2-tap turn. Turn on <b>quick confirm</b> in settings to strike the moment you tap a part.</li><li>Parts have their own HP and armour. At 0 HP a part is <b>severed</b> and the enemy loses what it did.</li><li><b>Eyes</b> blind it. <b>Jaws</b> stop bites. <b>Forelimbs</b> weaken attacks. <b>Hindlimbs</b> slow and cripple. <b>Tail</b> breaks balance. <b>Head</b> dazes. <b>Torso</b> is the only part that kills.</li><li>Slashing is great against limbs, piercing against eyes and jaws, blunt against heads and backs.</li><li>Enemies target <i>your</i> parts too. Hunters cut off your weapons, saboteurs go for eyes and legs, executioners wait for a weak torso.</li><li>Severed enemy parts can be <b>devoured</b> mid-fight to heal, or <b>absorbed</b> after to graft their trait.</li></ul>`)}
+  ${sec('The goal', '<p>Guide one pet through the Drowned Bog, the Hollow Caves and the Ashlands to the Heart of the Bloom. Each run is a fresh pet and a new procedural map. If the pet dies, the run ends (permadeath). Spores earned unlock new species and starting mutation seeds.</p><p>On the map, tap a glowing node to travel. Fights, elites, feeding sites, rest, mutation shrines, mysteries and a boss at the end of each land.</p>', true)}
+  ${sec('Fighting by body part', `<ul class="clean"><li>The best body part is pre-selected. Tap <b>Attack</b> and the game uses your best move on it: <b>one tap per turn</b>.</li><li>Or tap any part on the enemy to hit it right away. <b>Hold</b> a part to aim without striking (you will see hit %, damage and whether it cuts the part off).</li><li>Parts have their own HP and armour. At 0 HP a part is <b>severed</b> and the enemy loses what it did: no eyes means it misses, no jaws means no bites, no legs means it is slow.</li><li><b>Special</b> fires a mutation move, <b>Brace</b> guards, <b>Items</b> heals or lets you eat a severed part. The list button by the preview lets you pin a move.</li></ul>`, true)}
   ${sec('Mutation and care', '<ul class="clean"><li>Lost parts <b>regrow as something new</b>, shaped by diet, biome, old injuries and bond.</li><li>Four points of one food tag makes your pet mutate on the spot. Your pet visibly changes: wings, horns, plating, glowing glands.</li><li>3 mutations of one theme unlock a <b>set bonus</b>. Some themes clash (fire + frost, armour + wings).</li><li><b>Bond</b> falls as you push on. Low bond makes your pet feral: stronger, but it may ignore commands, and at the very end it refuses to fight. Care for it.</li><li>What your pet becomes decides which of the 8+ endings you get.</li></ul>')}
-  ${sec('Controls', '<p>Touch: everything is tap. Desktop: number keys pick moves, parts and choices, <kbd>Enter</kbd> confirms, <kbd>Esc</kbd> goes back, <kbd>A</kbd> auto-targets, <kbd>P</kbd> opens your pet. Settings (gear) has <b>Fast mode</b> and <b>Quick confirm</b>.</p>')}
-  </div><div class="bottom"><button class="primary wide" data-act="new" data-key="n">${key('N')}Start a run</button></div></div>`;
+  ${sec('Controls', '<p>Touch: everything is a tap. Desktop: <kbd>1</kbd>-<kbd>4</kbd> are Attack, Special, Brace, Items (and pick options elsewhere), <kbd>Enter</kbd> is the main button, <kbd>Esc</kbd> goes back, <kbd>P</kbd> opens your pet and <kbd>M</kbd> the menu.</p>')}
+  </div><div class="bottom"><button class="primary wide" data-act="new" data-key="Enter">Play</button></div></div>`;
 }
 
 function setupScreen() {
@@ -96,16 +95,18 @@ function setupScreen() {
   const cards = Object.values(PET_SPECIES).map((sp, i) => {
     const owned = meta.species.includes(sp.id);
     const pet = makePet(sp);
-    return `<button class="card listcard ${s.species === sp.id ? 'sel' : ''} ${owned ? '' : 'locked'}" ${owned ? `data-act="species" data-id="${sp.id}" data-key="${i + 1}"` : 'disabled'}>
-    <span class="th">${thumb(pet)}</span><span class="tx"><b style="color:${sp.accent};font-size:1.05rem;font-family:Georgia,serif">${sp.name}</b> ${s.species === sp.id ? `<span class="chip" style="--c:#8fd27a">${I('check', 13)}Selected</span>` : ''}
-    <span class="small dim" style="display:block">${esc(sp.desc)}</span><span class="mini" style="display:block;margin-top:2px">HP ${Math.round(sp.parts.torso[0] * 1.15)} \u00b7 Speed ${sp.spd}${sp.start.length ? ' \u00b7 ' + sp.start.map(i => MUTS[i].name).join(', ') : ''}</span>${owned ? '' : `<span class="warn small" style="display:block">${I('close', 12)} Locked: ${sp.unlock.text}</span>`}</span></button>`;
+    const short = sp.desc.split('.')[0];
+    return `<button class="card pick ${s.species === sp.id ? 'sel' : ''} ${owned ? '' : 'locked'}" ${owned ? `data-act="species" data-id="${sp.id}" data-key="${i + 1}"` : 'disabled'}>
+    <span class="th">${thumb(pet)}</span><span class="tx"><b style="color:${sp.accent}">${sp.name}</b>
+    <span class="small dim" style="display:block">${owned ? esc(short) : `${I('lock', 13)} ${esc(sp.unlock.text)}`}</span>
+    ${owned ? `<span class="mini" style="display:block">${I('heart', 11)} ${Math.round(sp.parts.torso[0] * 1.15)} \u00b7 ${I('bolt', 11)} ${sp.spd}${sp.start.length ? ' \u00b7 ' + sp.start.map(i => MUTS[i].name).join(', ') : ''}</span>` : ''}</span></button>`;
   }).join('');
   const seeds = meta.seeds.map(id => `<option value="${id}" ${s.seedMut === id ? 'selected' : ''}>${esc(MUTS[id].name)}</option>`).join('');
-  return `<div class="screen">${top({ left: backBtn(), title: 'Choose your pet' })}<div class="content stack">${cards}
-  <details class="card"><summary style="min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:700">Options: name, seed, mutation seed</summary><div class="stack" style="margin-top:8px"><label>Pet name<input id="petName" maxlength="16" placeholder="${PET_SPECIES[s.species].name}" value="${esc(s.name)}"></label>
-  <label>Run seed (optional)<input id="runSeed" maxlength="20" placeholder="random" value="${esc(s.seed)}"></label>
-  <label>Mutation seed<select id="seedMut"><option value="">None</option>${seeds}</select></label><p class="mini">Same seed = same map and encounters.</p></div></details></div>
-  <div class="bottom"><button class="primary wide" data-act="start" data-key="Enter">${key('Enter')}Begin the run</button></div></div>`;
+  return `<div class="screen">${top({ left: backBtn(), title: 'Pick your pet' })}<div class="content stack">${cards}
+  <details class="card"><summary style="min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:700">${I('gear', 18)}&nbsp;Options</summary><div class="stack" style="margin-top:8px"><label>Name<input id="petName" maxlength="16" placeholder="${PET_SPECIES[s.species].name}" value="${esc(s.name)}"></label>
+  <label>Seed<input id="runSeed" maxlength="20" placeholder="random" value="${esc(s.seed)}"></label>
+  <label>Starting mutation<select id="seedMut"><option value="">None</option>${seeds}</select></label></div></details></div>
+  <div class="bottom"><button class="primary big wide" data-act="start" data-key="Enter">${I('play', 24)}Start</button></div></div>`;
 }
 
 function seedlabScreen() {
@@ -136,9 +137,8 @@ function codexScreen() {
 // ---------------- run: map ----------------
 function petStrip() {
   const pet = run.pet, t = pet.parts.torso; const [m, mc] = mood(run.bond);
-  const nm = Object.values(pet.parts).reduce((a, p) => a + p.muts.length, 0);
-  return `<button class="pstrip" data-act="sheet"><span class="thumb">${thumb(pet)}</span><span class="info"><span class="nm"><span>${esc(pet.name)}</span><span class="small ${mc}">${m}</span></span>
-   <span class="st"><span>${I('heart', 12)} ${t.hp}/${t.max}</span><span>${nm} mutations \u00b7 ${run.inv.length}/4 items</span></span>${bar(t.hp, t.max)}<span style="display:block;margin-top:3px">${bar(run.bond, 100, 'bond thin')}</span></span></button>`;
+  return `<button class="pstrip" data-act="sheet" aria-label="Pet"><span class="thumb">${thumb(pet)}</span><span class="info"><span class="nm"><span>${esc(pet.name)}</span><span class="small ${mc}">${I('heart', 12)} ${m}</span></span>
+   <span class="st"><span>${t.hp}/${t.max} HP</span><span>${run.inv.length ? I('item', 12) + ' ' + run.inv.length : ''}</span></span>${bar(t.hp, t.max)}</span></button>`;
 }
 function mapSVG(avail) {
   const W = 360, GAP = 76, PADT = 64, PADB = 56, H = PADT + FINAL_LAYER * GAP + PADB;
@@ -162,17 +162,15 @@ function mapSVG(avail) {
     nodes += `<g class="node ${av ? 'avail' : ''} ${cur ? 'cur' : ''}" style="color:${info.color}" ${av ? `data-act="node" data-id="${n.id}" tabindex="0" role="button" aria-label="${info.name}"` : ''} opacity="${done && !cur ? 0.5 : 1}">
      ${av ? `<circle class="ring" cx="${x}" cy="${y}" r="${r + 5}" fill="none" stroke="${info.color}" stroke-width="2.5"/><circle cx="${x}" cy="${y}" r="${r + 12}" fill="transparent"/>` : ''}
      <circle class="base" cx="${x}" cy="${y}" r="${r}" fill="#0d1410" stroke="${cur ? '#fff' : info.color}" stroke-width="${cur ? 4 : 3}"/>
-     <g transform="translate(${x - s / 2} ${y - s / 2})" style="color:${info.color}">${I(done && !cur ? 'check' : n.type, s)}</g></g>`;
+     <g transform="translate(${x - s / 2} ${y - s / 2})" style="color:${info.color}">${I(done && !cur ? 'check' : n.type, s)}</g>${av ? `<text x="${x}" y="${y + r + 17}" text-anchor="middle" font-size="12" font-weight="700" fill="${info.color}" stroke="#000" stroke-width="3" paint-order="stroke">${({ feed: 'Feed', shrine: 'Shrine', elite: 'Elite', event: 'Event' })[n.type] || info.name}</text>` : ''}</g>`;
   }
   return `<svg class="map" viewBox="0 0 ${W} ${H}" role="img" aria-label="Run map">${bands}${edges}${nodes}</svg>`;
 }
 function mapScreen() {
   const avail = G.availableNodes(run); const b = BIOMES[run.biomeId];
-  const btns = avail.map((id, i) => { const n = nodeById(run.map, id), inf = NODE_INFO[n.type]; return `<button class="nbtn" data-act="node" data-id="${id}" data-key="${i + 1}" style="border-color:${inf.color}66"><span style="color:${inf.color}">${I(n.type, 26)}</span><b>${key(i + 1)}${inf.name}</b><small>${BIOMES[n.biome].short}</small></button>`; }).join('');
-  const notes = run.notes.slice(-3).map(n => `<div class="${n.c === 'mut' ? 'good' : ''}">\u2022 ${esc(n.m)}</div>`).join('');
-  return `<div class="screen">${top({ left: gearBtn, title: b.name, sub: `Step ${run.depth + 1}/${FINAL_LAYER + 1} \u00b7 Seed ${esc(run.seed)}`, right: petBtn })}
-  <div class="content stack">${petStrip()}<div class="mapwrap">${mapSVG(avail)}</div><div class="notes">${notes}</div></div>
-  <div class="bottom"><div class="row" style="flex-wrap:nowrap;gap:8px">${btns}</div></div></div>`;
+  return `<div class="screen">${top({ left: gearBtn, title: b.name, sub: `${run.depth + 1} / ${FINAL_LAYER + 1}`, right: petBtn })}
+  <div class="mapstrip">${petStrip()}</div><div class="content stack"><div class="mapwrap">${mapSVG(avail)}</div></div>
+  <div class="bottom hintbar">${I('map', 18)} Tap a glowing spot to travel</div></div>`;
 }
 
 // ---------------- run: choice screens (stage + sheet) ----------------
@@ -183,32 +181,32 @@ function sheetScreen(topTitle, glyph, color, bodyHtml, footHtml = '') {
   const b = BIOMES[run.biomeId];
   return `<div class="screen">${top({ left: gearBtn, title: topTitle, sub: b.name, right: petBtn })}${stage(glyph, color)}<div class="sheetpanel"><div class="grab"></div><div class="sbody">${bodyHtml}</div>${footHtml ? `<div class="sfoot">${footHtml}</div>` : ''}</div></div>`;
 }
-const contBtn = `<button class="primary wide" data-act="nodedone" data-key="Enter">${key('Enter')}Continue ${I('chevron', 18)}</button>`;
+const contBtn = `<button class="primary big wide" data-act="nodedone" data-key="Enter">Continue</button>`;
 function feedScreen() {
   const p = run.pending;
-  const foods = p.foods.map((id, i) => { const f = FOODS[id]; return `<button class="card food" data-act="eat" data-id="${id}" data-key="${i + 1}" ${p.result ? 'disabled' : ''}>${I(id, 40)}<b>${key(i + 1)}${f.name}</b><span class="mini" style="color:#b6c6b8">${f.desc}</span><span>${Object.entries(f.tags).map(([t, n]) => `<span class="chip" style="--c:${TAGS[t].color}">${I(t, 12)}${TAGS[t].name} +${n}</span>`).join('')}</span><span class="mini">Heal ${Math.round(f.heal * 100)}%${f.bond ? ` \u00b7 bond ${f.bond > 0 ? '+' : ''}${f.bond}` : ''}</span></button>`; }).join('');
-  const body = `<h2>Feeding Site</h2><p class="dim small">${BIOMES[run.biomeId].short} forage. Your pet is what it eats: every tag pushes its next mutation, and four of a kind makes it mutate on the spot.</p><div class="foods">${foods}</div>${p.result ? `<div class="result">${esc(p.result)}</div>` : ''}`;
-  return sheetScreen('Feeding Site', 'feed', '#8fc66a', body, p.result ? contBtn : `<button class="wide ghost" data-act="feedskip" data-key="5">${key(5)}Move on hungry</button>`);
+  const foods = p.foods.map((id, i) => { const f = FOODS[id]; return `<button class="card food" data-act="eat" data-id="${id}" data-key="${i + 1}" ${p.result ? 'disabled' : ''}>${I(id, 52)}<b>${f.name}</b><span>${Object.entries(f.tags).map(([t, n]) => `<span class="chip" style="--c:${TAGS[t].color}">${I(t, 12)}+${n}</span>`).join('')}</span></button>`; }).join('');
+  const body = `<h2>Tap a food</h2><div class="foods">${foods}</div>${p.result ? `<div class="result">${esc(p.result)}</div>` : ''}`;
+  return sheetScreen('Feeding Site', 'feed', '#8fc66a', body, p.result ? contBtn : `<button class="wide ghost" data-act="feedskip">Skip</button>`);
 }
 function restScreen() {
   const p = run.pending;
-  const opts = G.REST_OPTIONS.map((o, i) => `<button class="card choice ${o.id === 'train' ? 'danger' : ''}" data-act="rest" data-id="${o.id}" data-key="${i + 1}" ${p.result ? 'disabled' : ''} style="--c:${o.id === 'train' ? '#e0584c' : '#79b8d9'}"><span class="gi">${I(o.id === 'train' ? 'fight' : o.id === 'sleep' ? 'rest' : o.id === 'groom' ? 'heart' : 'regen', 26)}</span><span class="tx"><b>${key(i + 1)}${o.name}</b><span class="small dim">${o.desc}</span></span></button>`).join('');
-  const body = `<h2>Rest &amp; Care</h2><p class="dim small">A quiet spot. How you treat your pet decides whether it stays loyal or goes feral.</p><div class="stack">${opts}</div>${p.result ? `<div class="result">${esc(p.result)}</div>` : ''}`;
-  return sheetScreen('Rest & Care', 'rest', '#79b8d9', body, p.result ? contBtn : '');
+  const opts = G.REST_OPTIONS.map((o, i) => `<button class="card choice ${o.id === 'train' ? 'danger' : ''}" data-act="rest" data-id="${o.id}" data-key="${i + 1}" ${p.result ? 'disabled' : ''} style="--c:${o.id === 'train' ? '#e0584c' : '#79b8d9'}"><span class="gi">${I(o.id === 'train' ? 'fight' : o.id === 'sleep' ? 'rest' : o.id === 'groom' ? 'heart' : 'regen', 28)}</span><span class="tx"><b>${o.name}</b><span class="small dim">${o.desc}</span></span></button>`).join('');
+  const body = `<h2>Rest</h2><div class="stack">${opts}</div>${p.result ? `<div class="result">${esc(p.result)}</div>` : ''}`;
+  return sheetScreen('Rest', 'rest', '#79b8d9', body, p.result ? contBtn : '');
 }
 function shrineScreen() {
   const p = run.pending;
   const cards = p.offers.map((id, i) => {
-    const r = canPlace(run.pet, id);
-    const note = r.ok ? '<span class="mini good" style="display:block">Fits a free socket.</span>' : r.reason === 'conflict' ? `<span class="mini warn" style="display:block">Conflicts with ${esc(MUTS[r.with].name)} (you choose what to replace).</span>` : '<span class="mini warn" style="display:block">Socket full: you will replace something.</span>';
-    return mutRow(id, note, 'button', `data-act="shrine" data-idx="${i}" data-key="${i + 1}" ${p.result ? 'disabled' : ''}`);
+    const m = MUTS[id], r = canPlace(run.pet, id);
+    const note = r.ok ? '' : `<span class="mini warn" style="display:block">${r.reason === 'conflict' ? 'Replaces ' + esc(MUTS[r.with].name) : 'Replaces something'}</span>`;
+    return `<button class="mut rar-${m.rarity}" style="--c:${TAGS[m.tags[0]].color}" data-act="shrine" data-idx="${i}" data-key="${i + 1}" ${p.result ? 'disabled' : ''}><span class="mi">${I(m.tags[0], 30)}</span><span class="tx"><b>${esc(m.name)}</b><span class="small" style="display:block">${esc(m.desc)}</span>${note}</span></button>`;
   }).join('');
-  const body = `<h2>Mutation Shrine</h2><p class="dim small">Three gifts, weighted by what your pet has eaten, suffered and become. Tap one to take it.</p><div class="stack">${cards}</div>${p.result ? `<div class="result">${esc(p.result)}</div>` : ''}`;
-  return sheetScreen('Mutation Shrine', 'shrine', '#b58cf0', body, p.result ? (run.replace ? '' : contBtn) : `<button class="wide ghost" data-act="shrineskip" data-key="4">${key(4)}Leave an offering instead (+3 bond)</button>`);
+  const body = `<h2>Pick a mutation</h2><div class="stack">${cards}</div>${p.result ? `<div class="result">${esc(p.result)}</div>` : ''}`;
+  return sheetScreen('Mutation Shrine', 'shrine', '#b58cf0', body, p.result ? (run.replace ? '' : contBtn) : `<button class="wide ghost" data-act="shrineskip">Skip (+3 bond)</button>`);
 }
 function eventScreen() {
   const p = run.pending; const ev = EVENTS.find(e => e.id === p.eventId);
-  const ch = ev.choices.map((c, i) => `<button class="card choice" data-act="event" data-idx="${i}" data-key="${i + 1}" ${p.result ? 'disabled' : ''} style="--c:#d6c88a"><span class="gi">${I('event', 26)}</span><span class="tx"><b>${key(i + 1)}${c.label}</b><span class="small dim">${c.hint}</span></span></button>`).join('');
+  const ch = ev.choices.map((c, i) => `<button class="card choice" data-act="event" data-idx="${i}" data-key="${i + 1}" ${p.result ? 'disabled' : ''} style="--c:#d6c88a"><span class="gi">${I('event', 28)}</span><span class="tx"><b>${c.label}</b><span class="small dim">${c.hint}</span></span></button>`).join('');
   const body = `<h2>${ev.title}</h2><p>${ev.text}</p><div class="stack">${ch}</div>${p.result ? `<div class="result">${esc(p.result)}</div>` : ''}`;
   return sheetScreen('Mystery', 'event', '#d6c88a', body, p.result ? contBtn : '');
 }
@@ -236,72 +234,95 @@ function animFor(evs, s, held) {
   if (held) { if (s.result === 'win') ea = 'faint'; else pa = 'faint'; }
   return { petLunge, enLunge, pa, ea };
 }
-function combatScreen(s, held) {
+// Derive what the combat UI shows: the selected body part (defaults to the best one), the Attack move and the Special move.
+function combatView(s) {
   const P = s.p, E = s.e, cs = ui.cs;
-  let step = held ? 'action' : (['target', 'item', 'itemtgt', 'devour'].includes(cs.step) ? cs.step : 'action');
-  const selMove = step === 'target' ? listMoves(P).find(m => m.id === cs.move) : null;
-  if (step === 'target' && !selMove) step = 'action';
-  const tgtMode = step === 'target' && selMove;
+  const moves = listMoves(P);
+  const base = moves.filter(m => m.id.startsWith('base_')), mut = moves.filter(m => !m.id.startsWith('base_'));
+  const baseUse = base.filter(m => m.cdLeft <= 0);
+  const manual = !!(cs.sel && E.parts[cs.sel] && !E.parts[cs.sel].sev);
+  const pinned = cs.atk ? baseUse.find(m => m.id === cs.atk) : null;
+  let sel = manual ? cs.sel : null;
+  if (!sel) { const bp = bestMove(s, pinned ? [pinned] : baseUse); sel = bp ? bp.slot : Object.keys(E.parts).find(sl => !E.parts[sl].sev); }
+  const atk = pinned || (bestMove(s, baseUse, sel) || {}).mv || baseUse[0] || null;
+  const mutUse = mut.filter(m => m.cdLeft <= 0);
+  const pinS = cs.spec ? mutUse.find(m => m.id === cs.spec) : null;
+  const spec = pinS || (bestMove(s, mutUse.filter(m => m.tgt !== 'self' && m.tgt !== 'enemy'), sel) || {}).mv || mutUse[0] || null;
+  return { P, E, moves, base, mut, baseUse, mutUse, sel, manual, atk, spec };
+}
+function previewStrip(s, v) {
+  const { E, sel, atk } = v;
+  if (!atk || !sel) return `<div class="prev"><span class="dim">Nothing to attack with: Brace or use an item.</span><button class="icon ghost mvbtn" data-act="cstep" data-step="moves" aria-label="Moves">${I('moves', 22)}</button></div>`;
+  const p = E.parts[sel], e = estimate(s, 'p', atk, sel), tot = e.dmg * e.hits;
+  const fx = e.kill ? '<b class="bad">KILL</b>' : e.sever ? `<b class="bad">${I('sever', 14)} cuts off</b>` : p.arm ? `<span class="dim">${I('armor', 13)} ${p.arm}</span>` : '';
+  const why = e.sever && !e.kill ? `<span class="why">${esc(severPreview(s, sel)[0] || '')}</span>` : '';
+  return `<div class="prev"><span class="pt">${I(sel, 20)}<b>${esc(p.label)}</b></span><span class="nums"><b>${e.hit}%</b> \u00b7 ~${tot}</span>${fx}<button class="icon ghost mvbtn" data-act="cstep" data-step="moves" aria-label="Moves">${I('moves', 22)}</button>${why}</div>`;
+}
+function combatScreen(s, held) {
+  const P = s.p, E = s.e;
+  const v = combatView(s);
+  const live = !held;
   const evs = held ? (s.ev || []) : ui.events;
   const an = animFor(evs, s, !!held);
   const sevNowE = evs.filter(e => e.side === 'e' && e.k === 'sever').map(e => e.slot), sevNowP = evs.filter(e => e.side === 'p' && e.k === 'sever').map(e => e.slot);
   const flash = side => { const f = {}; for (const e of evs) if (e.side === side && e.slot && ['hit', 'crit', 'heal', 'regrow', 'sever'].includes(e.k)) f[e.slot] = e.k; return f; };
-  const sel = tgtMode ? (cs.sel && E.parts[cs.sel] && !E.parts[cs.sel].sev ? cs.sel : null) : null;
-  const sug = tgtMode ? suggestTarget(s, selMove) : null;
-  let badges = null;
-  if (tgtMode) { badges = {}; for (const sl of [sel, sug]) if (sl && !E.parts[sl].sev) badges[sl] = estimate(s, 'p', selMove, sl).hit + '%'; }
-  const ih = initiativeHint(s);
-  const initp = `<span class="initp ${ih.first === 'p' ? 'p' : ih.first === 'e' ? 'e' : ''}">${I('bolt', 13)}${ih.first === 'p' ? 'You act first' : ih.first === 'e' ? 'Foe acts first' : 'Close race'}</span>`;
-  const tail = s.log.slice(-2).map(l => `<div class="lg-${(l.c || '').split(' ')[0] || 'sys'} ${l.c && l.c.includes('sever') ? 'lg-sever' : ''}">${esc(l.m)}</div>`).join('');
-  const arena = `<div class="arena ${tgtMode ? 'tgtmode' : ''}">${bg(run.biomeId)}<div class="dim-overlay"></div>
-   <div class="slot slot-e"><div class="crw ${an.enLunge ? 'lunge-e' : ''}">${cr(E, { side: 'e', targetable: !!tgtMode, hl: sel, suggest: sug && sug !== sel ? sug : null, bars: tgtMode ? 'all' : 'damaged', badges, flash: flash('e'), events: evs, anim: an.ea, sevNow: sevNowE })}</div></div>
-   <div class="slot slot-p" data-act="sheet"><div class="crw ${an.petLunge ? 'lunge-p' : ''}">${cr(P, { side: 'p', bars: 'damaged', flash: flash('p'), events: evs, anim: an.pa, sevNow: sevNowP })}</div></div></div>`;
-  const ticker = `<button class="ticker" data-act="logopen" aria-label="Open combat log"><span class="lines">${tail}</span><span style="color:var(--dim)">${I('log', 20)}</span></button>`;
-  return `<div class="screen combat ${held ? 'held' : ''}">${top({ left: gearBtn, title: `Round ${s.turn}`, sub: BIOMES[run.biomeId].short, right: `${initp}${petBtn}` })}
-   ${plate(E, 'e')}${arena}${plate(P, 'p')}${ticker}<div class="bottom">${held ? `<div class="tut">${s.result === 'win' ? `${esc(E.name)} falls!` : `${esc(P.name)} has fallen...`}</div>` : actionPanel(s, step, selMove, sel, sug)}</div></div>`;
+  const badges = live && v.sel && v.atk ? { [v.sel]: estimate(s, 'p', v.atk, v.sel).hit + '%' } : null;
+  const last = s.log.length ? s.log[s.log.length - 1] : null;
+  const line = last ? `<div class="toastline lg-${(last.c || '').split(' ')[0] || 'sys'}">${esc(last.m)}</div>` : '';
+  const arena = `<div class="arena ${live ? 'tgtmode' : ''}">${bg(run.biomeId)}<div class="dim-overlay"></div>
+   <div class="slot slot-e"><div class="crw ${an.enLunge ? 'lunge-e' : ''}">${cr(E, { side: 'e', targetable: live, hl: live ? v.sel : null, bars: 'damaged', badges, flash: flash('e'), events: evs, anim: an.ea, sevNow: sevNowE })}</div></div>
+   <div class="slot slot-p" data-act="sheet"><div class="crw ${an.petLunge ? 'lunge-p' : ''}">${cr(P, { side: 'p', bars: 'damaged', flash: flash('p'), events: evs, anim: an.pa, sevNow: sevNowP })}</div></div>${line}</div>`;
+  return `<div class="screen combat ${held ? 'held' : ''}">${top({ left: gearBtn, title: `Round ${s.turn}`, sub: BIOMES[run.biomeId].short, right: petBtn })}
+   ${plate(E, 'e')}${arena}${plate(P, 'p')}<div class="bottom">${held ? `<div class="tut">${s.result === 'win' ? `${esc(E.name)} falls!` : `${esc(P.name)} has fallen...`}</div>` : actionPanel(s, v)}</div></div>`;
 }
-function actionPanel(s, step, mv, sel, sug) {
-  const P = s.p, E = s.e;
-  if (step === 'target' && mv) {
-    const alive = SLOT_ORDER.filter(sl => E.parts[sl] && !E.parts[sl].sev);
-    const chips = alive.map((sl, i) => { const e = estimate(s, 'p', mv, sl); return `<button class="pchip ${sel === sl ? 'sel' : ''} ${sug === sl ? 'sug' : ''} ${e.sever ? 'sevc' : ''} ${e.kill ? 'killc' : ''}" data-act="ctarget" data-slot-arg="${sl}" data-key="${KEYS[i] || ''}">${I(sl, 18)}<b>${esc(E.parts[sl].label)}</b><span class="pc">${e.hit}%</span></button>`; }).join('');
-    let prev = '<div class="l1"><span>Tap a body part</span></div><div class="l2">Tap the creature or a chip. Suggested part is outlined.</div>';
-    if (sel) {
-      const p = E.parts[sel], e = estimate(s, 'p', mv, sel), tot = e.dmg * e.hits;
-      const fx = e.kill ? 'Would KILL it' : e.sever ? 'SEVERS: ' + severPreview(s, sel).join(' \u00b7 ') : `Leaves ~${Math.max(0, p.hp - tot)} HP${p.arm ? ` (armour ${p.arm})` : ''}`;
-      prev = `<div class="l1"><span>${esc(p.label)} \u00b7 ${p.hp}/${p.max}${p.arm ? ` ${I('armor', 13)}${p.arm}` : ''}</span><span>${e.hit}% \u00b7 ~${tot} dmg</span></div><div class="l2 ${e.sever || e.kill ? 'sevfx' : ''}">${esc(fx)}</div>`;
-    }
-    return `<div class="actionbar"><div class="tgthead"><b>${I('attack', 16)} ${esc(mv.name)}</b><button class="qtoggle sm ghost" data-act="qtoggle">Quick: ${quick() ? 'on' : 'off'}</button></div>
-     <div class="pchips">${chips}</div><div class="prev">${prev}</div>
-     <div class="tgtbtns"><button class="ghost" data-act="cstep" data-step="action" data-key="Escape">${I('arrowleft', 18)}${key('Esc')}Back</button><button data-act="cauto" data-key="a">${I('star', 18)}${key('A')}Auto</button><button class="primary go" data-act="cconfirm" data-key="Enter" ${sel ? '' : 'disabled'}>${key('Enter')}Strike!</button></div></div>`;
-  }
-  const moves = listMoves(P);
-  const warn = `${P.feral > 0 ? `<div class="feralwarn">Feral: ~${Math.round(Math.min(1, 0.4 * P.feral + 0.03 * (P.aggr || 0)) * 100)}% to ignore your command, but it hits ${Math.round(P.feral * 30)}% harder.</div>` : ''}${s.bond <= REFUSE_BOND ? `<div class="feralwarn">${esc(P.name)} may refuse to fight (${s.refusals}/3)!</div>` : ''}`;
+function actionPanel(s, v) {
+  const { P, atk, spec } = v;
+  const warn = `${P.feral > 0 ? `<div class="feralwarn">Feral: may ignore you, hits harder.</div>` : ''}${s.bond <= REFUSE_BOND ? `<div class="feralwarn">${esc(P.name)} may refuse to fight (${s.refusals}/3)!</div>` : ''}`;
   const groundN = s.ground.filter(g => !g.gone).length;
-  const tip = run.stats.fights === 0 && s.turn <= 2 ? '<div class="tut">Tap a move, then a body part. Cut off eyes to blind it, jaws to stop bites. Torso kills.</div>' : '';
-  return `<div class="actionbar">${tip}${warn}<div class="mvgrid">${moves.map((m, i) => `<button class="mvb ${i === 0 ? 'main' : ''}" data-act="cmove" data-id="${m.id}" data-key="${KEYS[i] || ''}" ${m.cdLeft > 0 ? 'disabled' : ''}><span>${key(KEYS[i] || '-')}${esc(m.name)}</span><small>${shortMove(m)} \u00b7 ${esc(P.parts[m.src].label)}</small>${m.cdLeft > 0 ? `<span class="cd">cd ${m.cdLeft}</span>` : ''}</button>`).join('')}</div>
-   <div class="acrow"><button data-act="cdefend" data-key="b">${I('defend', 20)}${key('B')}Brace</button><button data-act="cstep" data-step="item" data-key="i" ${run.inv.length ? '' : 'disabled'}>${I('item', 20)}${key('I')}Item ${run.inv.length}</button><button data-act="cstep" data-step="devour" data-key="d" ${groundN ? '' : 'disabled'}>${I('devour', 20)}${key('D')}Devour ${groundN}</button></div></div>`;
+  const itemN = run.inv.length + groundN;
+  const sp = spec ? `<span class="sub">${esc(spec.name)}</span>` : '<span class="sub">none</span>';
+  return `<div class="actionbar">${warn}${previewStrip(s, v)}
+   <div class="acts">
+    <button class="abtn primary" data-act="catk" data-key="1" ${atk ? '' : 'disabled'}>${I('attack', 30)}<b>Attack</b><span class="sub">${atk ? esc(atk.name) : '-'}</span></button>
+    <button class="abtn special" data-act="cspec" data-key="2" ${spec ? '' : 'disabled'}>${I('special', 30)}<b>Special</b>${sp}</button>
+    <button class="abtn" data-act="cdefend" data-key="3">${I('defend', 30)}<b>Brace</b><span class="sub">guard</span></button>
+    <button class="abtn" data-act="cstep" data-step="item" data-key="4" ${itemN ? '' : 'disabled'}>${I('item', 30)}<b>Items</b><span class="sub">${itemN || '-'}</span></button>
+   </div><div class="hintbar2">${quick() ? 'Tap a body part to strike it \u00b7 hold to aim' : 'Tap a body part to aim, then Attack'}</div></div>`;
 }
 
 // ---------------- post combat ----------------
-function postScreen() {
+function postState() {
   const p = run.pending;
+  if (!ui.post || ui.post.ref !== p) {
+    const abs = {};
+    p.absorb.forEach((a, i) => { abs[i] = !a.done && canPlace(run.pet, a.trait).ok; });
+    ui.post = { ref: p, abs, reward: p.reward ? (p.reward.type === 'trophy' ? 'trophy' : 'ally') : null };
+  }
+  return ui.post;
+}
+function postScreen() {
+  const p = run.pending; const ps = postState();
   const abs = p.absorb.map((a, i) => {
-    const pl = canPlace(run.pet, a.trait); const where = pl.ok ? `<span class="mini good" style="display:block">Fits a free ${esc((MUTS[a.trait].slot === 'extra' ? 'extra' : SLOTS[MUTS[a.trait].slot]).toLowerCase())} socket.</span>` : '<span class="mini warn" style="display:block">Socket full: you will choose what to replace.</span>';
-    return `<div class="card stack" style="padding:10px"><div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b>${I(a.slot, 18)} ${esc(a.from)}'s ${esc(a.label.toLowerCase())}</b>${a.done ? `<span class="good small">${esc(a.result || '')}</span>` : ''}</div>${mutRow(a.trait, a.done ? '' : where)}${a.done ? '' : `<button class="primary wide" data-act="absorb" data-idx="${i}" data-key="${KEYS[i]}">${key(KEYS[i])}${I('dna', 20)}Absorb &amp; graft <span class="mini" style="color:#d0e8c8">(-1 bond)</span></button>`}</div>`;
+    const m = MUTS[a.trait]; const c = TAGS[m.tags[0]].color;
+    const fits = canPlace(run.pet, a.trait).ok;
+    if (a.done) return `<div class="mut done" style="--c:${c}"><span class="mi">${I(m.tags[0], 28)}</span><span class="tx"><b>${esc(m.name)}</b><span class="small good">${esc(a.result || 'Absorbed')}</span></span></div>`;
+    return `<button class="mut tog ${ps.abs[i] ? 'on' : ''}" style="--c:${c}" data-act="abstoggle" data-idx="${i}" data-key="${i + 1}"><span class="mi">${I(m.tags[0], 28)}</span><span class="tx"><b>${esc(m.name)}</b><span class="small dim" style="display:block">${esc(a.from)}'s ${esc(a.label.toLowerCase())} \u00b7 ${esc(m.desc)}</span>${fits ? '' : '<span class="mini warn" style="display:block">Replaces a mutation</span>'}</span><span class="sw"></span></button>`;
   }).join('');
   const rg = p.regrow.map(r => `<div class="small">\u21bb ${esc(r.text)}</div>`).join('');
-  const ch = p.choices.map((c, ci) => `<div class="card stack" style="padding:10px"><b>${esc(c.label)} is regrowing.</b> ${c.chosen === null ? `<span class="small dim">Your bond lets you guide it:</span>${c.options.map((id, oi) => mutRow(id, '', 'button', `data-act="rchoice" data-ci="${ci}" data-oi="${oi}"`)).join('')}<button class="sm" data-act="rchoice" data-ci="${ci}" data-oi="-1">Let it regrow plain</button>` : `<span class="good small">${esc(c.result)}</span>`}</div>`).join('');
+  const ch = p.choices.map((c, ci) => `<div class="card stack" style="padding:10px"><b>${esc(c.label)} regrows. Guide it?</b> ${c.chosen === null ? `${c.options.map((id, oi) => { const m = MUTS[id]; return `<button class="mut" style="--c:${TAGS[m.tags[0]].color}" data-act="rchoice" data-ci="${ci}" data-oi="${oi}"><span class="mi">${I(m.tags[0], 26)}</span><span class="tx"><b>${esc(m.name)}</b><span class="small dim" style="display:block">${esc(m.desc)}</span></span></button>`; }).join('')}<span class="small dim">Skip to let it regrow plain.</span>` : `<span class="good small">${esc(c.result)}</span>`}</div>`).join('');
   let reward = '';
   const rw = p.reward;
-  if (rw && rw.type === 'trophy') reward = `<div class="card stack"><h3>${I('boss', 20)} Boss trophy</h3>${mutRow(rw.id)}${rw.taken ? `<div class="good small">${esc(rw.result || '')}</div>` : `<button class="primary wide" data-act="reward" data-choice="trophy" data-key="t">${key('T')}Claim trophy</button>`}</div>`;
-  if (rw && rw.type === 'elite') reward = `<div class="card stack"><h3>${I('elite', 20)} The alpha lies beaten</h3><p class="small dim">Spare it and bond with it (gain an ally habit), or take its essence.</p>${rw.taken ? `<div class="good small">${esc(rw.result || '')}</div>` : `<button class="wide" data-act="reward" data-choice="ally">${I('heart', 20)}<span>Bond: <b>${esc(HABITS[rw.habit].name)}</b><br><span class="mini">${esc(HABITS[rw.habit].desc)}</span></span></button>${rw.essence.map((id, i) => mutRow(id, '', 'button', `data-act="reward" data-choice="${i}" data-key="${KEYS[i]}"`)).join('')}<button class="sm ghost" data-act="reward" data-choice="none">Leave it</button>`}</div>`;
-  const pending = p.choices.some(c => c.chosen === null) || run.replace;
+  if (rw && rw.type === 'trophy') reward = `<h3>${I('boss', 18)} Boss trophy</h3>${rw.taken ? `<div class="good small">${esc(rw.result || '')}</div>` : `<div class="mut tog on" style="--c:${TAGS[MUTS[rw.id].tags[0]].color}"><span class="mi">${I(MUTS[rw.id].tags[0], 28)}</span><span class="tx"><b>${esc(MUTS[rw.id].name)}</b><span class="small dim" style="display:block">${esc(MUTS[rw.id].desc)}</span></span></div>`}`;
+  if (rw && rw.type === 'elite') {
+    const opts = [{ k: 'ally', icon: 'heart', t: `Bond: ${HABITS[rw.habit].name}`, d: HABITS[rw.habit].desc }, ...rw.essence.map((id, i) => ({ k: String(i), icon: MUTS[id].tags[0], t: MUTS[id].name, d: MUTS[id].desc })), { k: 'none', icon: 'close', t: 'Leave it', d: '' }];
+    reward = `<h3>${I('elite', 18)} Reward</h3>${rw.taken ? `<div class="good small">${esc(rw.result || '')}</div>` : `<div class="stack">${opts.map(o => `<button class="mut tog radio ${ps.reward === o.k ? 'on' : ''}" data-act="rwpick" data-k="${o.k}" style="--c:#8fc66a"><span class="mi">${I(o.icon, 26)}</span><span class="tx"><b>${esc(o.t)}</b>${o.d ? `<span class="small dim" style="display:block">${esc(o.d)}</span>` : ''}</span><span class="sw"></span></button>`).join('')}</div>`}`;
+  }
   const final = nodeById(run.map, run.node).layer === FINAL_LAYER;
-  const body = `<div class="banner">${I('fight', 18)} <b>${esc(p.enemy.name)}</b> defeated. ${p.items.length ? 'Found: ' + p.items.map(i => `${I(i, 16)}${ITEMS[i].name}`).join(', ') + '. ' : ''}<span class="dim small">Bond drifted ${p.bondDrift}.</span></div>
+  const hasAbs = p.absorb.some(a => !a.done);
+  const body = `<div class="banner">${I('fight', 18)} <b>${esc(p.enemy.name)}</b> defeated${p.items.length ? ' \u00b7 found ' + p.items.map(i => `${I(i, 16)}`).join(' ') : ''}</div>
    ${rg || p.adapt.length ? `<div class="card">${rg}${p.adapt.map(a => `<div class="small amber">\u2736 ${esc(a)}</div>`).join('')}</div>` : ''}${ch}
-   <h3 style="margin-top:10px">Severed parts</h3><p class="small dim">Absorbing grafts the trait onto your pet.</p><div class="stack">${abs || '<div class="small dim">No usable traits dropped.</div>'}</div>${reward ? `<div style="margin-top:10px">${reward}</div>` : ''}`;
-  return sheetScreen('Victory', 'check', '#8fd27a', body, `<button class="primary wide" data-act="postleave" data-key="Enter" ${pending ? 'disabled' : ''}>${key('Enter')}${final ? 'Face the ending' : 'Continue'} ${I('chevron', 18)}</button>${pending ? '<div class="warn mini" style="text-align:center;margin-top:4px">Resolve the open choices first.</div>' : ''}`);
+   ${hasAbs || p.absorb.length ? `<h3>${I('dna', 18)} Absorb traits <span class="mini dim">(switch on to graft)</span></h3><div class="stack">${abs}</div>` : ''}${reward ? `<div style="margin-top:6px">${reward}</div>` : ''}`;
+  return sheetScreen('Victory', 'check', '#8fd27a', body, `<button class="primary big wide" data-act="postleave" data-key="Enter">${final ? 'Face the ending' : 'Continue'}</button>`);
 }
 
 // ---------------- end ----------------
@@ -338,7 +359,7 @@ function petSheet(enter) {
    <div class="card"><h3>Set bonuses</h3>${syn.map(s => `<div class="small good">${I('star', 13)} <b>${s.name}</b>: ${s.desc}</div>`).join('') || '<div class="small dim">None yet. Collect 3 mutations of one theme.</div>'}${pen.map(s => `<div class="small bad">${I('close', 13)} <b>${s.name}</b>: ${s.desc}</div>`).join('')}</div>
    <h3>Mutations</h3>${Object.values(pet.parts).flatMap(p => p.muts.map(id => mutRow(id, p.sev ? '<span class="mini bad" style="display:block">Inactive: part severed</span>' : ''))).join('') || '<div class="small dim">None.</div>'}
    <div class="card"><b>Diet</b><div>${diet}</div><b>Items</b><div>${inv}</div>${habits ? `<b>Habits</b><div>${habits}</div>` : ''}</div></div>`;
-  return sheet(`${esc(pet.name)} the ${PET_SPECIES[run.speciesId].name}`, body, { enter });
+  return sheet(pet.name === PET_SPECIES[run.speciesId].name ? esc(pet.name) : `${esc(pet.name)} the ${PET_SPECIES[run.speciesId].name}`, body, { enter });
 }
 function replaceSheet(enter) {
   const rp = run.replace;
@@ -347,11 +368,12 @@ function replaceSheet(enter) {
 }
 function settingsSheet(enter) {
   const inRun = run && !run.over && ui.screen === 'run';
-  const body = `<div class="stack">${toggle('sound', 'Sound', meta.sound !== false, meta.sound !== false ? 'sound' : 'mute')}${toggle('fasttoggle', 'Fast mode <span class="mini">(quicker animations and log)</span>', fast(), 'fast')}${toggle('qtoggle', 'Quick confirm <span class="mini">(tap a part to strike at once)</span>', quick(), 'target')}
-   ${inRun ? `<button class="wide" data-act="sheet">${I('paw', 20)}Pet sheet</button>` : ''}<button class="wide" data-act="howto">${I('info', 20)}How to play</button>
-   ${inRun ? `<button class="wide" data-act="title">${I('home', 20)}Save &amp; main menu</button><button class="wide danger" data-act="quit">${I('skull', 20)}Abandon run</button>` : ''}
-   ${ui.screen === 'title' ? `<button class="wide ghost danger" data-act="reset">Erase all saved progress</button>` : ''}</div>`;
-  return sheet('Settings', body, { enter });
+  const inFight = inRun && run.phase === 'combat';
+  const body = `<div class="stack">${toggle('sound', 'Sound', meta.sound !== false, meta.sound !== false ? 'sound' : 'mute')}${toggle('fasttoggle', 'Fast animations', fast(), 'fast')}${toggle('qtoggle', 'Tap a part to strike', quick(), 'target')}
+   ${inFight ? `<button class="wide" data-act="logopen">${I('log', 20)}Combat log</button>` : ''}${inRun ? `<button class="wide" data-act="sheet">${I('paw', 20)}Pet</button>` : ''}<button class="wide" data-act="howto">${I('info', 20)}How to play</button>
+   ${inRun ? `<button class="wide" data-act="title">${I('home', 20)}Save &amp; exit</button><button class="wide danger" data-act="quit">${I('skull', 20)}Give up</button>` : ''}
+   ${ui.screen === 'title' ? `<button class="wide ghost danger" data-act="reset">Erase all progress</button>` : ''}</div>`;
+  return sheet('Menu', body, { enter });
 }
 function logSheet(enter) {
   const s = ui.hold ? ui.hold.s : run && run.combat;
@@ -359,14 +381,23 @@ function logSheet(enter) {
   return sheet('Combat log', `<div class="biglog" id="log">${lines}</div>`, { enter });
 }
 function pickSheet(enter) {
-  const s = run.combat; const cs = ui.cs; const P = s.p;
+  const s = run.combat; const cs = ui.cs; const P = s.p; const v = combatView(s);
   let title = '', body = '';
-  if (cs.step === 'item') { title = 'Use an item'; body = `<div class="stack">${run.inv.map((id, i) => `<button class="choice card" data-act="citem" data-id="${id}" data-key="${KEYS[i]}"><span class="gi" style="--c:#cfe">${I(id, 30)}</span><span class="tx"><b>${key(KEYS[i])}${ITEMS[id].name}</b><span class="small dim">${ITEMS[id].desc}</span></span></button>`).join('') || '<div class="dim">No items.</div>'}</div>`; }
-  else if (cs.step === 'itemtgt') {
+  const mvRow = (m, on, act) => `<button class="choice card ${on ? 'sel' : ''}" data-act="${act}" data-id="${m.id}" ${m.cdLeft > 0 ? 'disabled' : ''}><span class="gi">${I(m.id.startsWith('base_') ? m.src : 'special', 26)}</span><span class="tx"><b>${esc(m.name)}</b><span class="small dim">${esc(moveSummary(m))}${m.cdLeft > 0 ? ` \u00b7 ready in ${m.cdLeft}` : ''}</span></span></button>`;
+  if (cs.step === 'moves') {
+    title = 'Moves';
+    body = `<p class="small dim">Attack and Special pick the best move for the part you aim at. Pin one here if you prefer.</p><h3>Attack</h3><div class="stack"><button class="choice card ${cs.atk ? '' : 'sel'}" data-act="setatk" data-id=""><span class="gi">${I('star', 24)}</span><span class="tx"><b>Auto (best)</b></span></button>${v.base.map(m => mvRow(m, cs.atk === m.id, 'setatk')).join('')}</div>
+     ${v.mut.length ? `<h3>Special</h3><div class="stack"><button class="choice card ${cs.spec ? '' : 'sel'}" data-act="setspec" data-id=""><span class="gi">${I('star', 24)}</span><span class="tx"><b>Auto (best)</b></span></button>${v.mut.map(m => mvRow(m, cs.spec === m.id, 'setspec')).join('')}</div>` : ''}`;
+  } else if (cs.step === 'item') {
+    title = 'Items';
+    const g = s.ground.map((x, i) => ({ x, i })).filter(o => !o.x.gone);
+    body = `<div class="stack">${run.inv.map(id => `<button class="choice card" data-act="citem" data-id="${id}"><span class="gi" style="--c:#cfe">${I(id, 32)}</span><span class="tx"><b>${ITEMS[id].name}</b><span class="small dim">${ITEMS[id].desc}</span></span></button>`).join('')}
+     ${g.length ? `<h3>${I('devour', 18)} Eat a severed part <span class="mini dim">(heals, no graft)</span></h3>${g.map(o => `<button class="choice card" data-act="cdevour" data-idx="${o.i}"><span class="gi" style="--c:#e0584c">${I('devour', 28)}</span><span class="tx"><b>${esc(o.x.from)}'s ${esc(o.x.label.toLowerCase())}</b><span class="small dim">${o.x.trait ? esc(MUTS[o.x.trait].name) : 'plain flesh'}</span></span></button>`).join('')}` : ''}${!run.inv.length && !g.length ? '<div class="dim">Nothing here.</div>' : ''}</div>`;
+  } else if (cs.step === 'itemtgt') {
     const def = ITEMS[cs.item]; const want = def.target === 'ownSevered'; title = `${def.name}: which part?`;
     const slots = SLOT_ORDER.filter(sl => P.parts[sl] && (P.parts[sl].sev === want));
-    body = `<div class="stack">${slots.map((sl, i) => `<button class="choice card" data-act="citemtgt" data-slot-arg="${sl}" data-key="${KEYS[i]}"><span class="gi">${I(sl, 26)}</span><span class="tx"><b>${key(KEYS[i])}${esc(P.parts[sl].label)}</b><span class="small dim">${P.parts[sl].sev ? 'Severed' : P.parts[sl].hp + '/' + P.parts[sl].max}</span></span></button>`).join('') || '<div class="dim">Nothing to use it on.</div>'}</div>`;
-  } else { title = 'Devour a severed part'; const g = s.ground.map((x, i) => ({ x, i })).filter(o => !o.x.gone); body = `<p class="small dim">Heals your pet now, but the part can no longer be absorbed for its trait.</p><div class="stack">${g.map((o, k) => `<button class="choice card" data-act="cdevour" data-idx="${o.i}" data-key="${KEYS[k]}"><span class="gi" style="--c:#e0584c">${I('devour', 28)}</span><span class="tx"><b>${key(KEYS[k])}${esc(o.x.from)}'s ${esc(o.x.label.toLowerCase())}</b><span class="small dim">${o.x.trait ? 'trait: ' + esc(MUTS[o.x.trait].name) : 'plain flesh'}</span></span></button>`).join('') || '<div class="dim">Nothing left.</div>'}</div>`; }
+    body = `<div class="stack">${slots.map(sl => `<button class="choice card" data-act="citemtgt" data-slot-arg="${sl}"><span class="gi">${I(sl, 28)}</span><span class="tx"><b>${esc(P.parts[sl].label)}</b><span class="small dim">${P.parts[sl].sev ? 'Severed' : P.parts[sl].hp + '/' + P.parts[sl].max}</span></span></button>`).join('') || '<div class="dim">Nothing to use it on.</div>'}</div>`;
+  }
   return `<div class="sback" data-act="cstep" data-step="action"></div><div class="sheet ${enter ? 'enter' : ''}" role="dialog"><div class="grab"></div><header><h2>${title}</h2><button class="icon ghost" data-act="cstep" data-step="action" data-key="Escape" aria-label="Close">${I('close', 24)}</button></header><div class="sb">${body}</div></div>`;
 }
 function beastSheet(id, enter) {
@@ -387,17 +418,29 @@ function beastInfoSheet(enter) {
   const body = `<div class="bigcr">${cr(E, { side: 'e', bars: 'all' })}</div><div class="stack"><div class="card small"><b>${I('eye', 16)} Behaviour</b><br>${AI[E.ai] || ''}${E.regrow ? `<br>Regrows: ${E.regrow.slots.map(x => E.parts[x]?.label).join(', ')} every ${E.regrow.every} rounds.` : ''}${g > 0 ? `<br><span class="warn">Torso shielded ${Math.round(g * 100)}% while other parts stand.</span>` : ''}${E.desc ? `<br><span class="dim">${esc(E.desc)}</span>` : ''}</div><div class="card"><table class="parts">${rows}</table></div></div>`;
   return sheet(esc(E.name), body, { enter });
 }
+const TUT = [
+  { ic: 'map', t: 'Travel', d: 'Tap a glowing spot on the map. Fights, food, rest and shrines each shape your pet.' },
+  { ic: 'attack', t: 'Fight', d: 'Tap a body part to hit it. Cut off eyes, jaws or legs to cripple the enemy. Hold a part to aim without striking.' },
+  { ic: 'dna', t: 'Mutate', d: 'Your pet changes with what it eats, where it goes and how it is hurt. Keep it happy, or it will refuse to fight.' },
+];
+function tutSheet(enter) {
+  const t = TUT[ui.tut];
+  return `<div class="sback"></div><div class="sheet tut ${enter ? 'enter' : ''}" role="dialog" aria-label="Quick tour"><div class="grab"></div><div class="sb" style="text-align:center"><div class="tutic">${I(t.ic, 56)}</div><h2>${t.t}</h2><p>${t.d}</p><div class="dots">${TUT.map((_, i) => `<i class="${i === ui.tut ? 'on' : ''}"></i>`).join('')}</div></div>
+   <div class="sfoot row2"><button class="ghost" data-act="tutskip" data-key="Escape">Skip</button><button class="primary" data-act="tutnext" data-key="Enter">${ui.tut >= 2 ? 'Got it' : 'Next'}</button></div></div>`;
+}
 function renderModal() {
   let html = '', kind = '';
   const inRun = run && ui.screen === 'run';
-  if (inRun && !run.over && run.replace) { kind = 'replace'; }
-  else if (inRun && !run.over && run.phase === 'combat' && !ui.hold && ['item', 'itemtgt', 'devour'].includes(ui.cs.step) && !ui.modal) kind = 'pick';
+  if (inRun && ui.tut !== null && !run.over) kind = 'tut';
+  else if (inRun && !run.over && run.replace) { kind = 'replace'; }
+  else if (inRun && !run.over && run.phase === 'combat' && !ui.hold && ['item', 'itemtgt', 'moves'].includes(ui.cs.step) && !ui.modal) kind = 'pick';
   else if (ui.modal) kind = ui.modal;
   if (kind === 'pet' && !(inRun && run.pet)) kind = '';
   if (kind === 'log' && !(inRun && (run.combat || ui.hold))) kind = '';
   if (kind === 'beastinfo' && !(inRun && (run.combat || ui.hold))) kind = '';
   const enter = modalEl.dataset.k !== kind;
-  if (kind === 'replace') html = replaceSheet(enter);
+  if (kind === 'tut') html = tutSheet(enter);
+  else if (kind === 'replace') html = replaceSheet(enter);
   else if (kind === 'pick') html = pickSheet(enter);
   else if (kind === 'pet') html = petSheet(enter);
   else if (kind === 'settings') html = settingsSheet(enter);
@@ -457,7 +500,7 @@ function doCombat(act) {
   if (!r.ok) { ui.msg = r.error; return; }
   ui.events = s ? s.ev.slice() : [];
   combatSound();
-  ui.cs = { step: 'action' };
+  ui.cs = { step: 'action', atk: ui.cs.atk, spec: ui.cs.spec };
   if (run.phase !== 'combat' || run.over) {
     const ms = fast() ? 450 : 950;
     ui.hold = { s };
@@ -485,7 +528,8 @@ const ACT = {
   start: () => {
     ui.setup.name = document.getElementById('petName')?.value || ui.setup.name; ui.setup.seed = document.getElementById('runSeed')?.value || ui.setup.seed; ui.setup.seedMut = document.getElementById('seedMut')?.value || ui.setup.seedMut;
     run = G.newRun(meta, { species: ui.setup.species, name: ui.setup.name, seed: ui.setup.seed, seedMut: ui.setup.seedMut });
-    ui.screen = 'run'; ui.cs = { step: 'action' }; ui.events = []; ui.modal = null; ui.hold = null; ui.mapFocus = null;
+    ui.screen = 'run'; ui.cs = { step: 'action' }; ui.events = []; ui.modal = null; ui.hold = null; ui.mapFocus = null; ui.post = null;
+    ui.tut = meta.tutorial ? null : 0;
   },
   buyseed: d => { if (buySeed(meta, d.id)) mutSound(); },
   node: d => { const r = G.enterNode(run, d.id); if (r.ok) { ui.cs = { step: 'action' }; ui.events = []; } },
@@ -494,30 +538,40 @@ const ACT = {
   shrine: d => { G.shrineTake(run, +d.idx); mutSound(); }, shrineskip: () => G.shrineTake(run, null),
   event: d => { G.eventChoose(run, +d.idx); sfx.click(); },
   nodedone: () => { G.completeNode(run); },
-  cstep: d => { ui.cs = { step: d.step }; ui.modal = null; },
-  cmove: d => {
-    const s = run.combat; const mv = listMoves(run.pet).find(m => m.id === d.id);
-    if (!mv || mv.cdLeft > 0) return;
-    if (mv.tgt === 'all' || mv.tgt === 'enemy' || mv.tgt === 'self') doCombat({ type: 'attack', move: mv.id, target: 'torso' });
-    else ui.cs = { step: 'target', move: mv.id, sel: suggestTarget(s, mv) };
-  },
+  cstep: d => { ui.cs = { ...ui.cs, step: d.step }; ui.modal = null; },
+  catk: () => { const v = combatView(run.combat); if (v.atk) doCombat({ type: 'attack', move: v.atk.id, target: v.sel }); },
+  cspec: () => { const v = combatView(run.combat); const mv = v.spec; if (!mv) return; doCombat({ type: 'attack', move: mv.id, target: (mv.tgt === 'all' || mv.tgt === 'enemy' || mv.tgt === 'self') ? 'torso' : v.sel }); },
+  setatk: d => { ui.cs = { ...ui.cs, atk: d.id || null, step: 'action' }; },
+  setspec: d => { ui.cs = { ...ui.cs, spec: d.id || null, step: 'action' }; },
   ctarget: d => {
-    if (ui.cs.step !== 'target') return;
-    const slot = d.slotArg || d.slot;
-    if (quick() || ui.cs.sel === slot) doCombat({ type: 'attack', move: ui.cs.move, target: slot });
-    else ui.cs.sel = slot;
+    if (ui.cs.step !== 'action') return;
+    if (ui.holdFired) { ui.holdFired = false; return; }
+    const slot = d.slotArg || d.slot; const s = run.combat; const v = combatView(s);
+    if (quick() || (v.manual && ui.cs.sel === slot)) {
+      const mv = (ui.cs.atk && v.baseUse.find(m => m.id === ui.cs.atk)) || (bestMove(s, v.baseUse, slot) || {}).mv || v.atk;
+      if (mv) doCombat({ type: 'attack', move: mv.id, target: slot });
+    } else ui.cs = { ...ui.cs, sel: slot };
   },
-  cauto: () => { const mv = listMoves(run.pet).find(m => m.id === ui.cs.move); if (mv) ui.cs.sel = suggestTarget(run.combat, mv); },
-  cconfirm: () => { if (ui.cs.step === 'target' && ui.cs.sel) doCombat({ type: 'attack', move: ui.cs.move, target: ui.cs.sel }); },
   cdefend: () => doCombat({ type: 'defend' }),
   citem: d => { const def = ITEMS[d.id]; if (def.target) ui.cs = { step: 'itemtgt', item: d.id }; else doCombat({ type: 'item', item: d.id }); },
   citemtgt: d => doCombat({ type: 'item', item: ui.cs.item, target: d.slotArg }),
   cdevour: d => doCombat({ type: 'devour', idx: +d.idx }),
-  absorb: d => { G.postAbsorb(run, +d.idx); mutSound(); },
+  abstoggle: d => { const ps = postState(); ps.abs[d.idx] = !ps.abs[d.idx]; },
+  rwpick: d => { postState().reward = d.k; },
   rchoice: d => { G.postRegrowChoice(run, +d.ci, +d.oi); mutSound(); },
-  reward: d => { const c = d.choice; G.postClaimReward(run, c === 'ally' ? 'ally' : c === 'none' ? 'none' : c === 'trophy' ? undefined : +c); mutSound(); },
-  postleave: () => { const r = G.postLeave(run); if (r.ok) afterRunChange(); },
-  replace: d => { G.resolveReplaceChoice(run, d.id || null); mutSound(); },
+  postleave: () => {
+    const p = run.pending, ps = postState(); ps.going = true;
+    p.choices.forEach((c, ci) => { if (c.chosen === null) G.postRegrowChoice(run, ci, -1); });
+    const rw = p.reward;
+    if (rw && !rw.taken && !run.replace) { if (rw.type === 'trophy') G.postClaimReward(run); else { const k = ps.reward; G.postClaimReward(run, k === 'ally' ? 'ally' : (k == null || k === 'none') ? 'none' : +k); } mutSound(); }
+    for (let i = 0; i < p.absorb.length && !run.replace; i++) { const a = p.absorb[i]; if (!a.done && ps.abs[i]) { G.postAbsorb(run, i); mutSound(); } }
+    if (run.replace) return;
+    ps.going = false;
+    const r = G.postLeave(run); if (r.ok) afterRunChange();
+  },
+  replace: d => { G.resolveReplaceChoice(run, d.id || null); mutSound(); if (ui.post && ui.post.going && run.phase === 'post' && !run.replace) ACT.postleave(); },
+  tutnext: () => { if (ui.tut >= 2) ACT.tutskip(); else ui.tut++; },
+  tutskip: () => { ui.tut = null; meta.tutorial = true; persistMeta(); },
   sheet: () => { ui.modal = ui.modal === 'pet' ? null : 'pet'; },
   closemodal: () => { ui.modal = null; },
   quit: () => { if (confirm('Abandon this run? The pet is lost (you still earn spores for progress).')) { G.abandon(run); ui.modal = null; ui.hold = null; } },
@@ -546,8 +600,22 @@ export function init() {
     const scope = modalEl.className === 'open' ? modalEl : app;
     const el = [...scope.querySelectorAll('[data-key]')].find(n => n.dataset.key === k && !n.disabled);
     if (!el && scope === modalEl && k === 'Escape') { ui.modal = null; render(); return; }
+    if (!el && scope === app && run && ui.screen === 'run' && !run.over && !ui.hold && modalEl.className !== 'open') {
+      if (run.phase === 'map' && /^[1-9]$/.test(k)) { const id = G.availableNodes(run)[+k - 1]; if (id) { e.preventDefault(); handle('node', { id }, null); } return; }
+      if (run.phase === 'combat' && k === 'Enter') { e.preventDefault(); handle('catk', {}, null); return; }
+    }
     if (el) { e.preventDefault(); el.click(); }
   });
+  let holdT = null;
+  const stopHold = () => { clearTimeout(holdT); holdT = null; };
+  document.addEventListener('pointerdown', e => {
+    ui.holdFired = false;
+    const el = e.target.closest && e.target.closest('.slot-e .part.tgt');
+    if (!el || !run || !run.combat || ui.hold || ui.cs.step !== 'action') return;
+    stopHold(); holdT = setTimeout(() => { ui.holdFired = true; ui.cs = { ...ui.cs, sel: el.dataset.slot }; render(); }, 380);
+  });
+  ['pointerup', 'pointercancel', 'pointermove'].forEach(t => document.addEventListener(t, e => { if (t !== 'pointermove' || (e.movementX || e.movementY) && Math.abs(e.movementX) + Math.abs(e.movementY) > 6) stopHold(); }));
+  document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('.arena')) e.preventDefault(); });
   window.__feral = { get run() { return run; }, get meta() { return meta; }, ui, render, setRun: r => { run = r; ui.screen = 'run'; ui.cs = { step: 'action' }; ui.events = []; ui.hold = null; } }; // debug/test hook
   render();
 }

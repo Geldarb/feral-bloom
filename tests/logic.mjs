@@ -1,5 +1,6 @@
 // Deterministic logic tests for the core rules. Run: node tests/logic.mjs
 import assert from 'assert';
+import { bestMove, suggestTarget } from '../js/combat.js';
 import { RNG } from '../js/rng.js';
 import * as G from '../js/game.js';
 import { defaultMeta } from '../js/store.js';
@@ -92,6 +93,20 @@ ok('feral pet ignores orders; low bond refuses to fight', () => {
   const e2 = makeEnemy(ENEMIES.bog_toad, { scale: 1, dmg: 0.1 });
   r2.combat = startCombat(r2, e2, new RNG(4)); assert(r2.combat.p.feral > 0.5, 'feral computed');
   assert(derive(r2.combat.p).dmg > 15, 'feral = stronger');
+});
+
+ok('one-tap combat: bestMove picks a legal, non-cooldown target and agrees with suggestTarget', () => {
+  for (const sp of Object.keys(PET_SPECIES)) {
+    const run = G.newRun(meta, { species: sp, seed: 'BM' + sp }); const rg = new RNG(5);
+    while (run.phase !== 'combat') botStep(run, rg);
+    const s = run.combat; const moves = listMoves(s.p).filter(m => m.id.startsWith('base_'));
+    const bm = bestMove(s, moves);
+    assert(bm && !bm.mv.cdLeft && s.e.parts[bm.slot] && !s.e.parts[bm.slot].sev, 'best move legal for ' + sp);
+    const one = bestMove(s, [bm.mv]);
+    assert.strictEqual(one.slot, suggestTarget(s, bm.mv), 'single-move best slot equals suggestion');
+    const forced = bestMove(s, moves, 'torso');
+    assert(!forced || forced.slot === 'torso', 'slot-pinned best move stays on that slot');
+  }
 });
 
 ok('determinism: same seed => same map & same outcome', () => {

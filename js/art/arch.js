@@ -26,12 +26,14 @@ const quad = {
       return { b: s };
     },
     hind: k => {
+      const lo = k.o.low ? (x => `<g transform="translate(0 200) scale(1 .62) translate(0 -200)">${x}</g>`) : (x => x);
       const leg1 = 'M82 122 C68 138 68 164 80 182 C76 188 72 194 74 199 C84 203 106 203 112 199 C114 193 106 190 102 186 C112 170 124 150 122 126 C110 116 92 114 82 122Z';
-      return { b: tr(T(leg1, k.fd), 22, -4), f: T(leg1, k.f) + S('M84 199 v-5 M93 200 v-5 M102 199 v-5', LINE, 2) + HL('M84 128 C78 144 80 160 86 172') };
+      return { b: lo(tr(T(leg1, k.fd), 22, -4)), f: lo(T(leg1, k.f) + S('M84 199 v-5 M93 200 v-5 M102 199 v-5', LINE, 2) + HL('M84 128 C78 144 80 160 86 172')) };
     },
     fore: k => {
+      const lo = k.o.low ? (x => `<g transform="translate(0 200) scale(1 .62) translate(0 -200)">${x}</g>`) : (x => x);
       const leg1 = 'M184 126 C178 148 182 168 186 184 C182 190 180 196 184 200 C194 204 214 204 220 200 C220 194 212 190 208 186 C212 168 214 148 208 126 C202 118 190 118 184 126Z';
-      return { b: tr(T(leg1, k.fd), -24, -3), f: T(leg1, k.f) + S('M190 201 v-5 M199 202 v-5 M208 201 v-5', LINE, 2) + HL('M190 130 C186 146 188 160 192 172') };
+      return { b: lo(tr(T(leg1, k.fd), -24, -3)), f: lo(T(leg1, k.f) + S('M190 201 v-5 M199 202 v-5 M208 201 v-5', LINE, 2) + HL('M190 130 C186 146 188 160 192 172')) };
     },
     torso: k => {
       const c = k.cos;
@@ -71,14 +73,8 @@ const lizard = {
       if (t === 'fin') s = T('M80 116 C56 100 34 108 18 134 C46 128 66 130 86 134Z', k.fa) + s;
       return { b: s };
     },
-    hind: k => {
-      const l = 'M84 146 C68 154 58 170 54 188 C50 196 54 203 62 203 L86 203 C94 198 90 192 96 186 C106 176 120 168 124 154Z';
-      return { b: tr(T(l, k.fd), 24, -6), f: T(l, k.f) + S('M58 203 v-6 M68 203 v-6 M78 203 v-6', LINE, 2) };
-    },
-    fore: k => {
-      const l = 'M178 150 C190 164 200 180 202 192 C204 200 200 204 192 204 L170 204 C166 198 172 192 176 188 C170 178 160 170 156 158Z';
-      return { b: tr(T(l, k.fd), -28, -4), f: T(l, k.f) + S('M174 204 v-6 M184 205 v-6 M194 204 v-6', LINE, 2) };
-    },
+    hind: k => { const q = quad.parts.hind({ ...k, o: {} }); return { b: `<g transform="translate(-12 4) scale(1 .96)">${q.b}</g>`, f: `<g transform="translate(-12 4) scale(1 .96)">${q.f}</g>` }; },
+    fore: k => { const q = quad.parts.fore({ ...k, o: {} }); return { b: `<g transform="translate(-24 4) scale(1 .96)">${q.b}</g>`, f: `<g transform="translate(-24 4) scale(1 .96)">${q.f}</g>` }; },
     torso: k => {
       const c = k.cos;
       return (c.hind ? lizard.parts.hind(k).b + lizard.parts.hind(k).f : '') + (c.fore ? lizard.parts.fore(k).b + lizard.parts.fore(k).f : '') +
@@ -194,7 +190,7 @@ const spider = {
     fore: k => ({ b: [[190, 118, 232, 70, 270, 130], [196, 126, 244, 130, 270, 190], [180, 134, 212, 170, 226, 204], [168, 138, 176, 178, 184, 204]].map(p => leg([[p[0], p[1]], [p[2], p[3]], [p[4], p[5]]], 7, k.f, k)).join('') }),
     torso: k => T('M70 122 C66 80 100 62 128 66 C160 70 178 96 176 124 C174 152 148 168 118 166 C90 164 72 148 70 122Z', k.f) + N('M88 146 C106 162 150 162 168 140 C168 156 146 168 118 168 C100 168 90 158 88 146Z', k.fs) + HL('M84 92 C98 76 124 70 146 76'),
     back: k => [[96, 90], [124, 82], [150, 96], [110, 114], [140, 122]].map(([x, y], i) => circ(x, y, 8 - i % 2 * 2, k.P.dark, 'opacity=".45"')).join('') + S('M104 134 l10 8 l10 -8 l10 8', k.P.accent, 3, 'opacity=".7"'),
-    head: k => T('M178 114 C178 92 198 82 220 86 C242 90 250 108 244 124 C236 138 208 140 192 134 C182 130 178 122 178 114Z', k.f) + HL('M190 98 C202 90 222 90 234 98'),
+    head: k => T('M160 112 C160 92 184 88 200 96 L206 134 C186 142 160 134 160 112Z', k.fd) + T('M178 114 C178 92 198 82 220 86 C242 90 250 108 244 124 C236 138 208 140 192 134 C182 130 178 122 178 114Z', k.f) + HL('M190 98 C202 90 222 90 234 98'),
     jaws: k => T('M224 126 C220 140 222 150 230 156 C234 146 236 136 236 128Z', k.fa) + T('M244 122 C246 136 250 144 258 148 C258 138 256 128 252 120Z', k.fa) + circ(230, 156, 2, k.P.glow) + circ(258, 148, 2, k.P.glow),
     eyes: k => [[212, 102, 6], [228, 98, 7.5], [240, 106, 5.5], [220, 114, 4.5]].map(([x, y, r]) => eye(x, y, r, k.P, { mood: k.mood })).join(''),
   },
@@ -204,6 +200,7 @@ const spider = {
 const BIP = {
   golem: { torso: 'M96 84 L108 56 L196 56 L208 84 L210 140 L194 172 L110 172 L94 140Z', head: 'M122 54 L122 24 C122 12 138 6 152 6 C166 6 182 12 182 24 L182 54 C170 62 134 62 122 54Z', arm: 'M196 72 C218 72 234 90 238 116 C240 132 236 148 228 158 L206 156 C210 142 210 130 206 118 C202 106 196 98 188 92Z' },
   pilgrim: { torso: 'M112 70 C112 52 132 46 152 46 C172 46 192 52 192 70 L218 190 C190 198 114 198 86 190Z', head: 'M116 58 C108 28 126 6 154 6 C182 6 198 28 190 58 C176 68 130 68 116 58Z', arm: 'M190 70 C204 76 214 96 214 120 L206 146 L194 142 C196 126 194 110 188 98Z' },
+  sprite: { torso: 'M114 86 C108 66 128 56 152 56 C176 56 196 66 190 86 C204 118 200 170 152 174 C104 170 100 118 114 86Z', head: 'M104 60 C100 30 122 14 152 14 C182 14 204 30 200 60 C196 76 178 84 152 84 C126 84 108 76 104 60Z', arm: 'M190 94 C206 98 216 114 214 132 C208 136 200 132 198 126 C196 114 192 106 186 100Z' },
   reed: { torso: 'M120 66 C122 50 138 44 152 44 C168 44 182 50 184 66 L188 120 C190 150 176 168 152 170 C130 168 116 150 118 120Z', head: 'M126 44 L152 4 L178 44 C170 56 136 56 126 44Z', arm: 'M184 66 C202 70 214 82 218 100 C230 80 244 56 262 38 C262 62 250 94 232 122 C224 134 214 138 206 134 C206 118 198 102 188 92Z' },
 };
 const biped = {
@@ -211,10 +208,11 @@ const biped = {
   order: ['tail', 'back', 'hind', 'torso', 'fore', 'head', 'jaws', 'eyes', 'ext1', 'ext2'],
   cosmetic: ['hind', 'fore', 'head'],
   parts: {
-    tail: k => ({ b: T('M108 150 C92 156 82 168 80 184 C96 180 112 170 122 160Z', k.fd) }),
+    tail: k => ({ b: (k.o.kind === 'sprite') ? T('M130 150 C110 150 98 160 94 180 C110 178 126 170 138 162Z', k.fa) : T('M108 150 C92 156 82 168 80 184 C96 180 112 170 122 160Z', k.fd) }),
     back: k => ({ b: T('M108 84 L82 62 L92 94 L68 96 L96 112 L80 140 L108 130Z', k.fd) }),
     hind: k => {
       const kind = k.o.kind || 'golem';
+      if (kind === 'sprite') { const l = 'M122 160 C112 172 112 200 124 204 L148 204 C154 198 150 172 146 160Z'; return { b: tr(T(l, k.fd), 32, 0), f: T(l, k.f) + S('M124 204 v-5 M134 205 v-5 M144 204 v-5', LINE, 2) + HL('M124 168 C120 180 122 192 126 198') }; }
       if (kind === 'pilgrim') return { f: T('M126 190 C124 198 130 204 142 204 L158 204 C160 198 154 194 150 192Z', k.fd) + T('M160 192 C158 198 164 204 176 204 L190 204 C190 198 184 194 180 192Z', k.fd) };
       const l = 'M114 166 L110 198 L144 198 L148 166Z';
       return { b: tr(T(l, k.fd), 40, 0), f: T(l, k.f) + S('M112 198 L146 198', LINE, 3) + HL('M120 170 L118 190') };
@@ -223,7 +221,8 @@ const biped = {
       const kind = k.o.kind || 'golem'; const c = k.cos; const b = BIP[kind];
       let s = (c.hind ? biped.parts.hind(k).b || '' : '') + (c.hind ? biped.parts.hind(k).f : '') + (c.tail ? biped.parts.tail(k).b : '');
       s += T(b.torso, kind === 'pilgrim' ? k.fd : k.f);
-      if (kind === 'golem') s += S('M112 76 L196 76 M152 56 L152 172 M124 110 L180 110', LINE, 2, 'opacity=".35"') + N('M130 120 L174 120 L166 150 L138 150Z', k.fs, 'opacity=".9"') + HL('M114 70 L190 70');
+      if (kind === 'sprite') s += N('M128 122 C128 148 140 166 152 166 C164 166 176 148 176 122 C168 134 136 134 128 122Z', k.fs) + HL('M122 86 C118 108 120 130 126 148');
+      else if (kind === 'golem') s += S('M112 76 L196 76 M152 56 L152 172 M124 110 L180 110', LINE, 2, 'opacity=".35"') + N('M130 120 L174 120 L166 150 L138 150Z', k.fs, 'opacity=".9"') + HL('M114 70 L190 70');
       else if (kind === 'pilgrim') s += S('M130 70 L120 186 M176 70 L186 186', LINE, 2, 'opacity=".3"') + N('M146 72 L158 72 L164 184 L140 184Z', k.fs) + S('M112 112 C140 124 164 124 192 112', k.P.accent, 5);
       else s += N('M132 70 C132 100 134 130 140 160 C146 130 148 100 148 70Z', k.fs) + S('M136 90 L168 90 M136 110 L168 110 M138 130 L166 130', LINE, 2, 'opacity=".3"') + HL('M126 64 C124 90 126 118 132 144');
       if (c.head) s += biped.parts.head(k) + (k.has.eyes ? '' : biped.parts.eyes(k));
@@ -233,16 +232,19 @@ const biped = {
     fore: k => {
       const kind = k.o.kind || 'golem'; const b = BIP[kind];
       const hand = kind === 'golem' ? T('M222 160 m-18 0 a18 18 0 1 0 36 0 a18 18 0 1 0 -36 0', k.f) + HL('M210 154 q6 -8 14 -6') : kind === 'pilgrim' ? T('M200 146 C194 158 200 168 210 166 C220 164 218 150 212 144Z', k.fs) : '';
+      if (kind === 'sprite') return { b: `<g transform="translate(300 0) scale(-1 1) translate(0 4)">${T(b.arm, k.fd)}</g>`, f: T(b.arm, k.f) + HL('M196 104 C202 112 204 122 204 128') };
       return { b: kind === 'pilgrim' ? '' : `<g transform="translate(300 0) scale(-1 1) translate(0 4)">${T(b.arm, k.fd)}</g>`, f: T(b.arm, k.f) + hand + (kind === 'pilgrim' ? S('M214 150 L236 20', '#8a7358', 6) + S('M214 150 L236 20', LINE, 2, 'opacity=".5"') + circ(236, 18, 7, k.P.glow, `stroke="${LINE}" stroke-width="2.5"`) : '') };
     },
     head: k => {
       const kind = k.o.kind || 'golem'; const b = BIP[kind];
+      if (kind === 'sprite') return T('M116 30 C104 12 106 -6 116 -14 C128 -4 136 12 138 28Z', k.fd) + T('M188 30 C200 12 198 -6 188 -14 C176 -4 168 12 166 28Z', k.f) + N('M118 22 C112 10 112 2 118 -4 C124 4 128 14 130 24Z', k.P.pink) + N('M186 22 C192 10 192 2 186 -4 C180 4 176 14 174 24Z', k.P.pink) + T(b.head, k.f) + N('M110 66 C114 76 124 80 134 80 C124 76 116 70 112 60Z', k.fa) + HL('M116 36 C126 24 150 20 170 24') + circ(122, 66, 6, k.P.pink, 'opacity=".5"') + circ(182, 66, 6, k.P.pink, 'opacity=".5"');
       if (kind === 'pilgrim') return T(b.head, k.fd) + N('M130 54 C128 34 138 22 154 22 C170 22 180 34 178 54 C170 62 138 62 130 54Z', '#14090f') + HL('M128 30 C136 16 172 16 182 30');
       if (kind === 'reed') return T(b.head, k.f) + HL('M140 36 L152 14') + S('M144 6 C140 -2 134 -4 130 0', LINE, 3) + S('M160 6 C164 -2 170 -4 174 0', LINE, 3);
       return T(b.head, k.f) + HL('M130 20 C136 12 168 12 174 20') + S('M128 36 L176 36', LINE, 2, 'opacity=".3"');
     },
     jaws: k => {
       const kind = k.o.kind || 'golem';
+      if (kind === 'sprite') return N('M138 66 Q152 80 166 66 L164 70 Q152 86 140 70Z', '#3a0b10') + teeth(143, 68, 2, 3.2, 14) + T('M142 72 Q152 82 162 72 Q152 90 142 72Z', k.fs);
       if (kind === 'pilgrim') return N('M144 58 L164 58 L162 68 L146 68Z', '#14090f') + teeth(144, 58, 3, 4, 7);
       if (kind === 'reed') return T('M138 46 L152 66 L166 46Z', k.fd) + S('M146 50 L152 60 L158 50', LINE, 2);
       return N('M134 52 L170 52 L168 62 L136 62Z', '#14090f') + T('M136 58 L168 58 L164 72 L140 72Z', k.fd) + teeth(138, 58, 5, 3.5, 7);
@@ -250,6 +252,7 @@ const biped = {
     eyes: k => {
       const kind = k.o.kind || 'golem';
       const y = kind === 'reed' ? 32 : 34;
+      if (kind === 'sprite') return eye(134, 52, 10.5, k.P, { mood: k.mood }) + eye(170, 52, 10.5, k.P, { mood: k.mood });
       if (kind === 'pilgrim') return circ(142, 38, 5, k.P.glow) + circ(164, 38, 5, k.P.glow) + circ(142, 38, 2, '#fff') + circ(164, 38, 2, '#fff');
       return eye(140, y, 8, k.P, { mood: k.mood }) + eye(166, y, 8, k.P, { mood: k.mood });
     },

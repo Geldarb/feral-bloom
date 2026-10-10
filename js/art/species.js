@@ -10,7 +10,7 @@ export const DECO = {
   flameTail: k => { const [x, y] = k.A.tail; return flame(x + 6, y + 4, 1.5, '#ff7a1c', k) + flame(x - 8, y + 12, 1, '#ff4a1c', k); },
   wispTail: k => { const [x, y] = k.A.tail; return flame(x + 4, y + 2, 1.3, '#b070ff', k) + flame(x - 10, y + 12, 0.9, '#7a4ad0', k); },
   emberCheek: k => `<circle cx="226" cy="108" r="6" fill="#ffb030" opacity=".85"/><circle cx="226" cy="108" r="12" fill="url(#${k.id}-gl)"/>`,
-  jewel: k => `<g transform="translate(238 52)"><circle r="14" fill="url(#${k.id}-gl)"/>${T('M0 -9 L7 0 L0 9 L-7 0Z', '#e8b8ff')}${S('M-2 -4 L0 -7', '#fff', 1.6)}</g>`,
+  jewel: k => `<g transform="translate(${k.arch === 'biped' ? '152 30' : '238 52'})"><circle r="14" fill="url(#${k.id}-gl)"/>${T('M0 -9 L7 0 L0 9 L-7 0Z', '#e8b8ff')}${S('M-2 -4 L0 -7', '#fff', 1.6)}</g>`,
   shell: k => N('M100 116 C92 66 120 38 154 38 C190 38 216 66 208 116 C190 104 118 104 100 116Z', 'url(#' + k.id + '-a)', `stroke="${LINE}" stroke-width="3.2" stroke-linejoin="round"`) + S('M154 40 L154 108 M122 54 C124 76 128 94 134 108 M186 54 C184 76 180 94 174 108 M104 84 C130 92 178 92 206 84', LINE, 2.2, 'opacity=".5"') + HL('M114 70 C124 52 146 44 166 46'),
   crystalsBack: k => { const [x, y] = k.A.back; return crystal(x - 30, y + 14, 1, k.id, -25) + crystal(x, y + 12, 1.3, k.id) + crystal(x + 32, y + 16, 0.9, k.id, 25); },
   spikes: k => { const [x, y] = k.A.back; let s = ''; for (let i = -3; i <= 3; i++) s += T(`M${x + i * 15 - 7} ${y + 14} L${x + i * 15} ${y - 10 + Math.abs(i) * 4} L${x + i * 15 + 7} ${y + 14}Z`, k.fa); return s; },
@@ -38,10 +38,10 @@ const P = (base, o) => makePal(base, o);
 export const ART = {
   // ---- pets ----
   mossling: { arch: 'quad', pal: P('#78b45a', { belly: '#f4ecc0', accent: '#4f8f48', eye: '#e8d03a', glow: '#b8ff7a' }), o: { ears: 'round', tail: 'bushy' }, decos: [{ slot: 'back', kind: 'leaves', replace: false }] },
-  cinderpup: { arch: 'quad', pal: P('#d8603a', { belly: '#ffd9a0', accent: '#8a2e22', eye: '#ffd23a', glow: '#ffb030', pink: '#ffb08a' }), o: { ears: 'pointy', tail: 'thin' }, decos: [{ slot: 'tail', kind: 'flameTail' }, { slot: 'head', kind: 'emberCheek' }] },
+  cinderpup: { arch: 'quad', pal: P('#d8603a', { belly: '#ffd9a0', accent: '#8a2e22', eye: '#ffd23a', glow: '#ffb030', pink: '#ffb08a' }), o: { ears: 'pointy', tail: 'thin', snout: 'long' }, decos: [{ slot: 'tail', kind: 'flameTail' }, { slot: 'head', kind: 'emberCheek' }] },
   gloomfin: { arch: 'lizard', pal: P('#68bccb', { belly: '#e0f6f2', accent: '#f08aa8', eye: '#3a4a9a', glow: '#9af0ff' }), o: { head: 'newt', tail: 'fin' }, decos: [{ slot: 'head', kind: 'gills' }] },
-  shellback: { arch: 'quad', pal: P('#b99f6b', { belly: '#f1e2b8', accent: '#7a5a3a', eye: '#ffb83a', glow: '#ffd070' }), o: { ears: 'round', tail: 'stub' }, decos: [{ slot: 'back', kind: 'shell', replace: true }] },
-  wispling: { arch: 'quad', pal: P('#9e86d8', { belly: '#f1e8ff', accent: '#6a50b0', eye: '#7ff0ff', glow: '#e0b0ff', pink: '#ffc0e8' }), o: { ears: 'long', tail: 'thin' }, decos: [{ slot: 'head', kind: 'jewel' }, { slot: 'tail', kind: 'wispTail' }] },
+  shellback: { arch: 'quad', pal: P('#b99f6b', { belly: '#f1e2b8', accent: '#7a5a3a', eye: '#ffb83a', glow: '#ffd070' }), o: { ears: 'round', tail: 'stub', low: true }, decos: [{ slot: 'back', kind: 'shell', replace: true }] },
+  wispling: { arch: 'biped', pal: P('#9e86d8', { belly: '#f1e8ff', accent: '#6a50b0', eye: '#7ff0ff', glow: '#e0b0ff', pink: '#ffc0e8' }), o: { kind: 'sprite' }, decos: [{ slot: 'head', kind: 'jewel' }, { slot: 'tail', kind: 'wispTail' }] },
   // ---- swamp ----
   bog_toad: { arch: 'lizard', pal: P('#6f9a3c', { belly: '#dede9c', accent: '#4a6e26', eye: '#ffd23a', mood: 'angry' }), o: { head: 'toad', tail: 'stub', fangs: false }, decos: [{ slot: 'torso', kind: 'warts' }] },
   leech_swarm: { arch: 'blob', pal: P('#8e3a4a', { belly: '#e0a0a8', accent: '#6a2434', eye: '#ffe0a0', mood: 'wild' }), o: {}, decos: [], ext: { ext1: 'sucker', ext2: 'sucker' } },
