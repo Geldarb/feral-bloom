@@ -483,3 +483,41 @@ export function finishCombat(s) {
     ground: s.ground.filter(g => !g.gone), stats: s.stats, turns: s.turn,
   };
 }
+
+// ---------- UI helpers (pure) ----------
+const SEVER_FX = { eyes: 'Blinded: its accuracy collapses (-40)', head: 'Stunned head: -25 accuracy, easier to hit', hind: 'Crippled: much slower and easier to hit', tail: 'Loses balance: easier to hit, no counters', fore: 'Weakened: -10% damage', jaws: 'Bite attacks disabled', back: 'Back traits lost', ext1: 'Extra limb lost', ext2: 'Extra limb lost', torso: 'A killing blow' };
+// What happens if `slot` of the enemy is severed: array of short strings
+export function severPreview(s, slot) {
+  const E = s.e, p = E.parts[slot]; if (!p) return [];
+  const out = [];
+  if (slot === 'torso') return ['Killing blow if it lands'];
+  if (SEVER_FX[slot]) out.push(SEVER_FX[slot]);
+  const dis = E.moves.filter(m => m.src === slot).map(m => m.name);
+  if (dis.length) out.push('Disables: ' + [...new Set(dis)].join(', '));
+  if (p.trait && MUTS[p.trait]) out.push('Graftable: ' + MUTS[p.trait].name);
+  out.push('Causes bleeding');
+  return out;
+}
+// Best part to hit with move `mv` (score = expected damage + value of severing/killing)
+export function suggestTarget(s, mv) {
+  const E = s.e; let best = null, bs = -1;
+  for (const [slot, p] of Object.entries(E.parts)) {
+    if (p.sev) continue;
+    const e = estimate(s, 'p', mv, slot);
+    let sc = (e.hit / 100) * e.dmg * e.hits;
+    if (e.kill) sc += 80 * (e.hit / 100);
+    if (e.sever) {
+      const srcN = E.moves.filter(m => m.src === slot).length;
+      sc += (e.hit / 100) * (5 + srcN * 5 + (slot === 'eyes' ? 7 : 0) + (slot === 'jaws' ? 2 : 0) + (p.trait ? 4 : 0) + (slot === 'hind' ? 4 : 0));
+    }
+    if (slot === 'torso' && !e.kill) sc *= 0.6;
+    if (sc > bs) { bs = sc; best = slot; }
+  }
+  return best;
+}
+// who is likely to act first this round (deterministic part of the initiative roll)
+export function initiativeHint(s) {
+  const a = derive(s.p), b = derive(s.e);
+  const iP = a.spd - b.enemySpd + (a.firstStrike ? 100 : 0), iE = b.spd - a.enemySpd + (b.firstStrike ? 100 : 0);
+  return { p: iP, e: iE, first: iP - iE > 1.25 ? 'p' : iE - iP > 1.25 ? 'e' : 'tie' };
+}

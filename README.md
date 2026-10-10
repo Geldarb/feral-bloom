@@ -39,11 +39,17 @@
 
 1. Click **New run**, choose a pet, optionally a seed and a mutation seed, then **Begin**.
 2. On the map pick a connected node. Each biome ends with a boss; the Heart of the Bloom waits at the end.
-3. In a fight: **Attack** (choose a weapon, then the enemy body part; click it on the body map or press its number), **Brace**, **Item**, or **Devour** a severed part.
+3. In a fight (2 taps per turn): tap a **move**, then tap the enemy's **body part** on the creature (or a part chip). The suggested best part is pre-selected, so you can just hit **Strike!**; turn on **Quick confirm** in settings to strike the moment you tap a part, and **Fast mode** to speed up animations. Also **Brace**, **Item**, and **Devour** a severed part.
 4. After a win: let your pet regrow, absorb traits from severed parts, claim rewards.
 5. Keep an eye on **bond** (pink bar). Rest, groom, and feed treats.
 
-Keyboard: every button shows its hotkey. Numbers pick options/targets, `Esc` goes back, `P` opens the pet sheet, `M` toggles sound.
+Mobile: the UI is designed for phones in portrait (360-430px): bottom-anchored action bars, bottom-sheet modals, 44px+ touch targets, safe-area insets. It can be added to the home screen (PWA manifest + icons).
+
+Keyboard (desktop): every button shows its hotkey. Numbers pick moves/parts/options, `A` auto-targets the suggested part, `Enter` confirms, `Esc` goes back, `P` opens the pet sheet, `M` opens settings.
+
+## Art
+
+All art is hand-authored SVG, generated in code (no image assets): `js/art/` holds a drawing kit (outlines, gradient shading, highlights), 8 body-plan archetypes (quadruped, lizard, serpent, winged, crab, spider, biped, blob), per-species palettes and decorations for the 5 pets, 15 enemies and 4 bosses, ~50 mutation overlays that visibly change the pet (wings, horns, fangs, plating, flames, extra eyes...), layered biome backgrounds and an icon set. Every targetable body part is its own clickable region; severed parts vanish into a bleeding stump.
 
 ## Run locally
 
@@ -57,11 +63,12 @@ python3 -m http.server 8000
 ## Project layout
 
 ```
-index.html, style.css
+index.html, style.css, manifest.webmanifest, sw.js, icons/   (PWA)
 js/
   main.js            entry point
   ui.js              screens, input, rendering
-  svg.js             body-map SVG renderer
+  svg.js             creature renderer (parts, stumps, overlays, bars, animation classes)
+  art/               SVG art: kit, archetypes, species, mutation overlays, backgrounds, icons
   audio.js           WebAudio blips
   game.js            run controller (nodes, feeding, rest, shrine, events, post-fight, run end)
   combat.js          part-targeted turn-based combat, status effects, enemy AI
@@ -74,7 +81,7 @@ tests/
   logic.mjs          rule tests
   sim.mjs            headless simulation of hundreds of full runs with a bot
   bot.mjs            the bot
-  browser.mjs        headless Chrome click-through (needs puppeteer-core)
+  browser.mjs        headless Chrome: mobile (390x844 touch) + desktop (keyboard/mouse) click-through, layout audit, screenshots
 ```
 
 ## Tests
@@ -83,7 +90,9 @@ tests/
 node tests/logic.mjs        # rule tests: severing, regrowth, bosses, feral/refusal, determinism, save/restore, events
 node tests/sim.mjs 300      # bot plays 300 full runs; fails on any crash
 # headless browser click-through (installs nothing in the repo):
-mkdir -p /tmp/pw && (cd /tmp/pw && npm i puppeteer-core) && PW_DIR=/tmp/pw node tests/browser.mjs [url]
+mkdir -p /tmp/pw && (cd /tmp/pw && npm i puppeteer-core) && PW_DIR=/tmp/pw node tests/browser.mjs [url] [screenshotDir]
+# mobile pass: title -> setup -> map -> pet sheet -> fights (2 taps/turn) -> post-fight; checks no horizontal overflow,
+# touch targets >= 44px, no console errors; screenshots go to /workspace/feral-bloom-shots by default
 ```
 
 ## Notes

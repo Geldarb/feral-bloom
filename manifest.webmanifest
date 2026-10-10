@@ -1,0 +1,17 @@
+{
+  "name": "Feral Bloom",
+  "short_name": "Feral Bloom",
+  "description": "Raise one pet. Feed it, scar it, sever its enemies' limbs and watch it mutate. A browser roguelike.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080c09",
+  "theme_color": "#0e1510",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

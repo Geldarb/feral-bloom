@@ -57,7 +57,7 @@ export function makeEnemy(tpl, { scale = 1, dmg = 1, elite = null } = {}) {
 // The final boss mirrors the pet's body plan and borrows its strongest moves.
 export function makeHeart(tpl, pet, scale) {
   const c = makeEnemy({ ...tpl, parts: { torso: tpl.parts.torso, back: tpl.parts.back, ext1: tpl.parts.ext1, ext2: tpl.parts.ext2 }, moves: [], layout: pet.layout }, { scale, dmg: 1 });
-  c.layout = pet.layout;
+  c.layout = pet.layout; c.mirrorOf = pet.species;
   for (const [slot, p] of Object.entries(pet.parts)) {
     if (slot === 'torso' || slot === 'back' || slot.startsWith('ext')) continue;
     c.parts[slot] = makePart(slot, Math.round(p.b.hp * 1.4 * scale) + 4, 1, null, null);

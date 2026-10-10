@@ -1,73 +1,149 @@
-// SVG body-map renderer. Draws a creature as ellipse parts; shows damage, severed gaps, mutation glow and floating numbers.
+// Creature renderer: assembles hand-authored archetype art + species decorations + mutation overlays into an SVG
+// whose parts are clickable regions. Handles damage, severed stumps (with ichor), bars, target highlights and floats.
 import { MUTS, TAGS } from './data/mutations.js';
 import { SLOT_LABEL } from './creature.js';
+import { ARCH, extArt } from './art/arch.js';
+import { ART, DECO } from './art/species.js';
+import { overlayFor, overlayAnchors } from './art/overlays.js';
+import { defs, makePal, LINE, T, S, circ } from './art/kit.js';
 
-const E = (cx, cy, rx, ry, rot = 0) => ({ cx, cy, rx, ry, rot });
-export const LAYOUTS = {
-  quad: { tail: E(62, 108, 36, 9, -28), hind: E(100, 152, 17, 36, 8), torso: E(145, 112, 62, 38), back: E(145, 74, 44, 13), fore: E(190, 154, 15, 34, -8),
-    head: E(218, 84, 28, 24, -10), jaws: E(248, 102, 22, 10, 8), eyes: E(228, 76, 8, 6), ext1: E(110, 48, 14, 14), ext2: E(178, 44, 13, 13) },
-  serpent: { tail: E(48, 152, 50, 10, 18), torso: E(140, 125, 80, 28, -6), back: E(140, 92, 55, 10, -6), fore: E(190, 160, 12, 20), hind: E(95, 162, 12, 18),
-    head: E(232, 92, 27, 22, -15), jaws: E(258, 106, 20, 9, 10), eyes: E(240, 84, 7, 6), ext1: E(150, 58, 14, 14), ext2: E(204, 54, 13, 13) },
-  tall: { tail: E(98, 170, 32, 7, 25), hind: E(150, 182, 16, 30), torso: E(150, 114, 36, 54), back: E(112, 100, 13, 44), fore: E(200, 112, 13, 38, -12),
-    head: E(150, 44, 25, 22), jaws: E(150, 64, 15, 8), eyes: E(150, 40, 14, 5), ext1: E(212, 52, 13, 13), ext2: E(90, 54, 13, 13) },
-  blob: { torso: E(150, 125, 72, 52), jaws: E(214, 120, 22, 12), back: E(150, 72, 44, 14), ext1: E(86, 150, 17, 15), ext2: E(214, 156, 17, 15),
-    head: E(215, 90, 22, 18), eyes: E(222, 86, 7, 6), tail: E(70, 110, 30, 9, -20), fore: E(190, 165, 14, 20), hind: E(100, 165, 14, 20) },
-};
-const ORDER = ['tail', 'hind', 'torso', 'back', 'fore', 'ext1', 'ext2', 'head', 'jaws', 'eyes'];
+const ORDER_ALL = ['tail', 'hind', 'torso', 'back', 'fore', 'head', 'jaws', 'eyes', 'ext1', 'ext2'];
+const BAR_OFF = { head: [-6, -38], eyes: [30, -24], jaws: [12, 36], fore: [6, 40], hind: [-4, 40], tail: [-2, -30], back: [0, -36], torso: [0, 10], ext1: [0, -30], ext2: [0, -30] };
+const PULL = { head: 0.4, fore: 0.45, hind: 0.45, tail: 0.55 };
+const ICHOR = { swamp: '#8ab832', caves: '#8a6ae0', ashlands: '#f07a28' };
+let uid = 0;
 
-function hex2rgb(h) { h = h.replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
-function mix(a, b, t) { const A = hex2rgb(a), B = hex2rgb(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
-const SHADE = { torso: 0, back: -0.15, head: 0.08, jaws: -0.08, eyes: 0, fore: -0.05, hind: -0.05, tail: -0.12, ext1: 0.1, ext2: 0.1 };
+function artOf(c) {
+  const id = c.mirrorOf || c.species || c.id;
+  let a = ART[c.id] || ART[id];
+  if (!a) a = ART.mossling;
+  let arch = a.arch;
+  if (!arch) arch = (ART[c.mirrorOf] || ART.mossling).arch;
+  return { a, arch, archName: arch };
+}
+export function anchorsOf(c) { const { arch } = artOf(c); return ARCH[arch].A; }
+export function partCenter(c, slot) { const A = anchorsOf(c); const a = A[slot] || A.torso; return { x: a[0], y: a[1] }; }
 
-export function partCenter(c, slot) {
-  const L = LAYOUTS[c.layout] || LAYOUTS.quad;
-  const g = L[slot] || LAYOUTS.quad[slot];
-  return g ? { x: g.cx, y: g.cy - g.ry } : { x: 150, y: 100 };
+function ctxFor(c) {
+  const { a, arch } = artOf(c);
+  const id = 'cr' + (++uid);
+  const P = { ...a.pal };
+  if (c.mirrorOf === undefined && c.isPlayer) P.ichor = '#b3121c';
+  const feral = c.isPlayer && (c.feral || 0) > 0;
+  const k = { id, P, f: `url(#${id}-b)`, fd: `url(#${id}-d)`, fs: `url(#${id}-s)`, fa: `url(#${id}-a)`, o: { ...a.o }, A: ARCH[arch].A, arch, has: {}, cos: {}, mood: feral ? 'wild' : P.mood };
+  for (const sl of ORDER_ALL) k.has[sl] = !!c.parts[sl];
+  for (const sl of ARCH[arch].cosmetic || []) if (!c.parts[sl]) k.cos[sl] = true;
+  if (arch === 'biped' && !c.parts.head) k.cos.head = true;
+  return { k, a, arch };
 }
 
-// opts: { side:'p'|'e', targetable:bool, flash:{slot:kind}, events:[{side,slot,k,n}], hl:slot }
+function stump(x, y, slot, ichor, fresh) {
+  const big = slot === 'torso' ? 1.2 : 1;
+  return `<g class="stump ${fresh ? 'fresh' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${big})">
+<circle r="15" fill="${ichor}" opacity=".35" class="pulse"/>
+<ellipse rx="9" ry="7.5" fill="${ichor}" stroke="${LINE}" stroke-width="2.4"/><ellipse rx="4.6" ry="3.6" fill="#2a0508"/><path d="M-5 -2 l3 3 M3 -3 l-2 4" stroke="#fff" stroke-width="1" opacity=".5"/>
+<g class="drip"><path d="M-4 6 q-3 9 0 12 q3 -3 0 -12Z" fill="${ichor}"/></g><g class="drip d2"><path d="M4 5 q-3 7 0 10 q3 -3 0 -10Z" fill="${ichor}"/></g>
+<circle cx="-12" cy="8" r="2" fill="${ichor}"/><circle cx="13" cy="4" r="1.6" fill="${ichor}"/><circle cx="2" cy="-13" r="1.8" fill="${ichor}"/></g>`;
+}
+
+const wound = (x, y, frac, ichor) => {
+  if (frac > 0.55) return '';
+  const n = frac < 0.25 ? 3 : 2; let s = '';
+  for (let i = 0; i < n; i++) s += `<path d="M${(x - 12 + i * 11).toFixed(0)} ${(y - 6 + (i % 2) * 8).toFixed(0)} l9 7 M${(x - 9 + i * 11).toFixed(0)} ${(y - 9 + (i % 2) * 8).toFixed(0)} l6 3" stroke="${ichor}" stroke-width="2.6" stroke-linecap="round" fill="none" opacity=".9"/>`;
+  return s;
+};
+
+// opts: { side:'p'|'e', targetable, flash:{slot:kind}, events, hl, suggest, bars:'none'|'damaged'|'all', anim:'lunge'|'hit'|'faint'..., sevNow:[slots], badges:{slot:text}, size }
 export function renderCreature(c, opts = {}) {
-  const L = LAYOUTS[c.layout] || LAYOUTS.quad;
+  const { k, a, arch } = ctxFor(c);
+  const AR = ARCH[arch];
   const flip = opts.side === 'e';
-  let body = '';
-  for (const slot of ORDER) {
-    const p = c.parts[slot];
+  const ichor = c.isPlayer ? '#b3121c' : (a.pal.ichor && a.pal.ichor !== '#b3121c' ? a.pal.ichor : (ICHOR[c.biome] || '#8ab832'));
+  const parts = c.parts;
+  const headGone = parts.head && parts.head.sev;
+  const slotCls = (sl, p) => ['part', 'p-' + sl, opts.targetable && !p.sev ? 'tgt' : '', opts.hl === sl ? 'hl' : '', opts.suggest === sl ? 'sug' : '', opts.flash && opts.flash[sl] ? 'f-' + opts.flash[sl] : ''].join(' ');
+  const attrs = (sl, p) => `data-slot="${sl}" ${opts.targetable && !p.sev ? `data-act="ctarget" data-slot-arg="${sl}"` : ''}`;
+  const OA = overlayAnchors(arch === 'lizard' ? 'lizard' : 'quad');
+  const behind = [], front = [], tops = [];
+
+  const build = (sl, p) => {
+    let art = AR.parts[sl] ? AR.parts[sl](k) : '';
+    let b = '', f = '';
+    if (art && typeof art === 'object') { b = art.b || ''; f = art.f || ''; } else f = art || '';
+    if (sl === 'head' && !c.parts.eyes && !a.blind && AR.parts.eyes) f += AR.parts.eyes(k);
+    const decos = (a.decos || []).filter(d => d.slot === sl);
+    for (const d of decos) { const dd = DECO[d.kind] ? DECO[d.kind](k, sl) : ''; if (d.replace) f = dd; else f += dd; }
+    const ek = a.ext && a.ext[sl];
+    if (ek) f += extArt(ek, k, sl);
+    // mutation overlays
+    p.muts.forEach((m, i) => {
+      const ov = overlayFor(k, arch === 'lizard' ? 'lizard' : 'quad', sl, m, i, MUTS[m]);
+      if (ov && typeof ov === 'object') { b += ov.b || ''; f += ov.f || ''; } else f += ov || '';
+    });
+    f += wound(partCenter(c, sl).x, partCenter(c, sl).y, p.hp / p.max, ichor);
+    return { b, f };
+  };
+
+  const stumps = [], ghosts = [];
+  for (const sl of AR.order) {
+    const p = parts[sl];
     if (!p) continue;
-    const g = L[slot] || LAYOUTS.quad[slot];
-    if (!g) continue;
-    const frac = p.sev ? 0 : Math.max(0, p.hp / p.max);
-    const base = mix(c.color, '#ffffff', Math.max(0, SHADE[slot] || 0)) ;
-    const shaded = SHADE[slot] < 0 ? mix(c.color, '#000000', -SHADE[slot]) : base;
-    const fill = p.sev ? 'none' : mix('#7a1c1c', shaded, 0.25 + 0.75 * frac);
-    let stroke = '#10150f', sw = 2;
-    const mut = p.muts.length ? MUTS[p.muts[0]] : null;
-    if (mut && !p.sev) { stroke = TAGS[mut.tags[0]]?.color || '#fff'; sw = 3; }
-    const cls = ['part', p.sev ? 'sev' : '', opts.targetable && !p.sev ? 'tgt' : '', opts.hl === slot ? 'hl' : '', opts.flash && opts.flash[slot] ? 'f-' + opts.flash[slot] : ''].join(' ');
-    let shape = `<ellipse cx="${g.cx}" cy="${g.cy}" rx="${g.rx}" ry="${g.ry}" transform="rotate(${g.rot} ${g.cx} ${g.cy})" fill="${fill}" stroke="${p.sev ? '#c2514a' : stroke}" stroke-width="${sw}" ${p.sev ? 'stroke-dasharray="5 4"' : ''} />`;
-    if (slot === 'eyes' && !p.sev) shape += `<circle cx="${g.cx + 2}" cy="${g.cy}" r="${Math.min(g.rx, g.ry) * 0.5}" fill="#101010"/><circle cx="${g.cx + 3.5}" cy="${g.cy - 1.2}" r="1.6" fill="#fff"/>`;
-    if (!p.sev && frac < 0.65) {
-      const n = frac < 0.3 ? 4 : 2; let cr = '';
-      for (let i = 0; i < n; i++) { const a = (i + 1) * 1.7 + slot.length; const x = g.cx + Math.cos(a) * g.rx * 0.5, y = g.cy + Math.sin(a) * g.ry * 0.5; cr += `M${x.toFixed(1)} ${y.toFixed(1)} l${(Math.cos(a + 1) * 7).toFixed(1)} ${(Math.sin(a + 1) * 6).toFixed(1)} `; }
-      shape += `<path d="${cr}" stroke="#ff7a6a" stroke-width="1.6" fill="none" stroke-linecap="round" opacity=".85"/>`;
+    const cen = partCenter(c, sl);
+    const pull = PULL[sl] || 0;
+    const tc = k.A.torso;
+    const sx = cen.x + (tc[0] - cen.x) * pull, sy = cen.y + (tc[1] - cen.y) * pull;
+    const hidden = headGone && (sl === 'eyes' || sl === 'jaws');
+    if (p.sev) {
+      stumps.push(stump(sx, sy, sl, ichor, (opts.sevNow || []).includes(sl)));
+      if ((opts.sevNow || []).includes(sl)) { const { b, f } = build(sl, { ...p, muts: [] }); ghosts.push(`<g class="flyoff">${b}${f}</g>`); }
+      continue;
     }
-    if (p.sev) shape += `<path d="M${g.cx - 6} ${g.cy - 6} l12 12 M${g.cx + 6} ${g.cy - 6} l-12 12" stroke="#c2514a" stroke-width="2.2" opacity=".8"/>`;
-    // mutation pips
-    let pips = '';
-    if (!p.sev) p.muts.forEach((m, i) => { const col = TAGS[MUTS[m].tags[0]]?.color || '#fff'; pips += `<circle cx="${g.cx - 6 + i * 12}" cy="${g.cy + g.ry * 0.0}" r="3.4" fill="${col}" stroke="#0b0f0c" stroke-width="1"/>`; });
-    body += `<g class="${cls}" data-slot="${slot}" ${opts.targetable && !p.sev ? `data-act="ctarget" data-slot-arg="${slot}"` : ''}><title>${p.label}${p.sev ? ' (severed)' : ` ${p.hp}/${p.max}`}</title>${shape}${pips}</g>`;
+    if (hidden) continue;
+    const { b, f } = build(sl, p);
+    const cls = slotCls(sl, p), at = attrs(sl, p);
+    const motion = sl === 'tail' ? 'wag' : (sl === 'head' || sl === 'jaws' || sl === 'eyes') ? 'headbob' : '';
+    const org = `style="transform-origin:${sl === 'tail' ? cen.x + 40 : k.A.torso[0] + 50}px ${sl === 'tail' ? cen.y + 12 : k.A.torso[1] + 4}px"`;
+    if (b) behind.push(`<g class="${cls}" ${at}>${b}</g>`);
+    const pad = `<circle class="pad" cx="${cen.x}" cy="${cen.y}" r="${sl === 'eyes' ? 15 : 19}" fill="#000" fill-opacity="0"/>`;
+    front.push(`<g class="${cls} ${motion}" ${at} ${motion ? org : ''}>${f}${pad}</g>`);
+  }
+  // bars, rings, badges, floats in screen space (never mirrored)
+  const X = x => flip ? 300 - x : x;
+  let hud = '';
+  const barsMode = opts.bars || 'damaged';
+  for (const sl of AR.order) {
+    const p = parts[sl]; if (!p || p.sev) continue;
+    const cen = partCenter(c, sl);
+    const o = BAR_OFF[sl] || [0, -30];
+    const bx = X(cen.x + (flip ? -o[0] : o[0])), by = cen.y + o[1];
+    const frac = Math.max(0, p.hp / p.max);
+    if (opts.hl === sl || opts.suggest === sl) {
+      const pc = partCenter(c, sl);
+      hud += `<circle class="ring ${opts.suggest === sl && opts.hl !== sl ? 'sugr' : ''}" cx="${X(pc.x)}" cy="${pc.y}" r="${sl === 'eyes' ? 16 : 24}"/>`;
+    }
+    if (barsMode === 'none') continue;
+    if (barsMode === 'damaged' && frac >= 1 && !p.arm) continue;
+    if (barsMode === 'damaged' && frac >= 1 && p.arm && !opts.targetable) continue;
+    const col = frac > 0.6 ? '#7fcf6a' : frac > 0.3 ? '#e0b43a' : '#e0503a';
+    hud += `<g class="pbar" transform="translate(${(bx - 15).toFixed(1)} ${by.toFixed(1)})"><rect width="30" height="7" rx="3.5" fill="#0b0806" stroke="#000" stroke-width="1.2" opacity=".85"/><rect x="1" y="1" width="${Math.max(0, 28 * frac).toFixed(1)}" height="5" rx="2.5" fill="${col}"/>${p.arm > 0 ? `<g transform="translate(32 -2)"><path d="M0 0 h9 v7 l-4.5 4 l-4.5 -4Z" fill="#9aa4ad" stroke="#000" stroke-width="1.2"/><text x="4.5" y="7" font-size="7.5" font-weight="800" text-anchor="middle" fill="#0b0f12">${p.arm}</text></g>` : ''}</g>`;
+    if (opts.badges && opts.badges[sl]) hud += `<g class="badge" transform="translate(${bx.toFixed(1)} ${(by - 7).toFixed(1)})"><text text-anchor="middle" font-size="11.5" font-weight="800" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">${opts.badges[sl]}</text></g>`;
   }
   let floats = '';
+  let fi = 0;
   for (const e of (opts.events || [])) {
-    if (e.side !== opts.side || !e.slot || !c.parts[e.slot]) continue;
+    if (e.side !== opts.side || !e.slot || !parts[e.slot]) continue;
     const pc = partCenter(c, e.slot);
-    const x = flip ? 300 - pc.x : pc.x;
-    let txt = '', col = '#fff';
-    if (e.k === 'hit') { txt = '-' + e.n; col = '#ff8a7a'; } else if (e.k === 'crit') { txt = '-' + e.n + '!'; col = '#ffd36b'; }
-    else if (e.k === 'miss') { txt = 'miss'; col = '#9aa89c'; } else if (e.k === 'heal') { txt = '+' + e.n; col = '#8fe08a'; }
-    else if (e.k === 'sever') { txt = 'SEVERED'; col = '#ff4d4d'; } else if (e.k === 'regrow') { txt = 'regrown'; col = '#8fe08a'; }
-    if (txt) floats += `<text class="float" x="${x}" y="${pc.y}" fill="${col}" text-anchor="middle">${txt}</text>`;
+    let txt = '', colr = '#fff';
+    if (e.k === 'hit') { txt = '-' + e.n; colr = '#ff8a7a'; } else if (e.k === 'crit') { txt = '-' + e.n + '!'; colr = '#ffd36b'; }
+    else if (e.k === 'miss') { txt = 'miss'; colr = '#c0cbc2'; } else if (e.k === 'heal') { txt = '+' + e.n; colr = '#8fe08a'; }
+    else if (e.k === 'sever') { txt = 'SEVERED!'; colr = '#ff4d4d'; } else if (e.k === 'regrow') { txt = 'regrown'; colr = '#8fe08a'; }
+    if (txt) floats += `<text class="float" style="animation-delay:${(fi++ * 0.18).toFixed(2)}s" x="${X(pc.x)}" y="${pc.y - 8}" fill="${colr}" text-anchor="middle">${txt}</text>`;
   }
-  const inner = flip ? `<g transform="translate(300,0) scale(-1,1)">${body}</g>` : body;
-  return `<svg class="creature ${opts.side === 'e' ? 'enemy' : 'pet'}" viewBox="0 0 300 220" role="img" aria-label="${c.name} body map"><ellipse cx="150" cy="208" rx="105" ry="8" fill="#000" opacity=".35"/>${inner}${floats}</svg>`;
+  const sc = a.scale || 1;
+  const flipT = flip ? 'translate(300 0) scale(-1 1)' : '';
+  const sizeT = sc !== 1 ? `translate(150 205) scale(${sc}) translate(-150 -205)` : '';
+  const body = `<g class="idle">${behind.join('')}${front.join('')}${stumps.join('')}${ghosts.join('')}</g>`;
+  const cls = `creature ${flip ? 'enemy' : 'pet'} ${opts.anim || ''} ${opts.targetable ? 'targeting' : ''}`;
+  return `<svg class="${cls}" viewBox="0 -16 300 238" role="img" aria-label="${c.name}">${defs(k.id, k.P)}<ellipse cx="150" cy="206" rx="${110 * sc}" ry="9" fill="url(#${k.id}-sh)"/><g transform="${sizeT} ${flipT}">${body}</g>${hud}${floats}</svg>`;
 }
 export { SLOT_LABEL };
